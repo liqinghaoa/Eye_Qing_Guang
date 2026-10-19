@@ -1,0 +1,37 @@
+# Python / packaging
+__pycache__/
+*.py[cod]
+*.egg-info/
+/build/
+/dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environments / IDE / credentials
+.venv/
+venv/
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+
+# Raw data stays local; documentation and contracts remain version-controlled.
+/data
+
+# Each experiment is independent; weights and generated artifacts stay local.
+/experiments/*
+!/experiments/.gitkeep
+/outputs/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.log
+/wandb/
+/runs/

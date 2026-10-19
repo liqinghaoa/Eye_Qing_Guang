@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "raw/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
-                "mode": "source",
+                "file": "03_Method_and_Experiment/B0_ResNet50_512_基线实验实现方案_v1.md",
+                "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛"
+              "title": "B0_ResNet50_512_基线实验实现方案_v1"
             }
           }
         ]
@@ -83,7 +83,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 282.16668701171875
   },
   "right": {
     "id": "04cbc26a8dc33fac",
@@ -99,7 +99,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "raw/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
+                "file": "01_Background_and_Literature/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -118,7 +118,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "raw/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
+                "file": "01_Background_and_Literature/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
@@ -161,7 +161,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "raw/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
+                "file": "03_Method_and_Experiment/B0_ResNet50_512_基线实验实现方案_v1.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -170,12 +170,12 @@
               "title": "大纲"
             }
           }
-        ]
+        ],
+        "currentTab": 4
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -190,7 +190,20 @@
   },
   "active": "ba8a7f47081067cc",
   "lastOpenFiles": [
-    "raw/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
-    "raw"
+    "02_Research_Ideas/青光眼二分类竞赛研究思路与实验路线_v1.md",
+    "03_Method_and_Experiment/B0_ResNet50_512_基线实验实现方案_v1.md",
+    "01_Background_and_Literature/青光眼二分类与数据挑战研究综述.md",
+    "01_Background_and_Literature/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
+    "01_Background_and_Literature/key_papers/2026 Improving Generalization of Deep Learning for GlaucomaClassification Under Real-World Domain Shift viaUnsupervised Domain Adaptation.pdf",
+    "01_Background_and_Literature/key_papers/2025_Yang_Fundus_Image_Quality_Assessment_Enhancement_Review_arXiv.pdf",
+    "01_Background_and_Literature/key_papers/2022_Lopez_FundusQ_Net_arXiv.pdf",
+    "01_Background_and_Literature/key_papers/2020_Ren_Balanced_Meta_Softmax_arXiv.pdf",
+    "01_Background_and_Literature/key_papers/2019_Touvron_FixRes_arXiv.pdf",
+    "01_Background_and_Literature/key_papers/2021_Menon_Long_Tail_Logit_Adjustment_arXiv.pdf",
+    "01_Background_and_Literature/key_papers/2023_External_Validation_GON_Multicentre_Eye.pdf",
+    "01_Background_and_Literature/key_papers/2021_Yuan_Deep_AUC_Maximization_arXiv.pdf",
+    "01_Background_and_Literature/key_papers/2020_Hendrycks_AugMix_arXiv.pdf",
+    "01_Background_and_Literature/key_papers/2021_Zhou_MixStyle_arXiv.pdf",
+    "raw/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md"
   ]
 }
