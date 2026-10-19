@@ -1,11 +1,15 @@
+# PPU project (host and qinghao_ppu_train container): /data/workspace/QinghaoLi/Eye_Qing_Guang
+# Keep the container's CUDA_VISIBLE_DEVICES=4,5,6,7; use logical cuda:0..3 here.
+# Preserve the installed PPU PyTorch/SDK. Current pipeline is single-device, not DDP.
 experiment:
-  name: b0_resnet50_512_dev_s42_v1
+  name: b0_resnet50_512_dev_ppu_s42_v1  # Use a new name for each resource comparison.
   protocol: b0_dev_v1
   seed: 42
-  output_root: experiments
+  output_root: experiments           # Relative to the project; no extra output root needed.
 data:
-  raw_root: data/raw/glaucoma_first
-  manifest_dir: data/manifests/glaucoma_b0_dev_v1
+  # Shared raw dataset: train.csv/valid.csv/test.csv and train/valid/test directories.
+  raw_root: /data/workspace/KanglongTan/data/glaucoma_first
+  manifest_dir: data/manifests/glaucoma_b0_dev_ppu_v1  # New provenance/path version; never overwrite old manifests.
   image_column: Image_name
   label_column: True_Label
   age_column: Age
@@ -14,7 +18,7 @@ data:
     valid: {csv: valid.csv, images: valid, labeled: true}
     test: {csv: test.csv, images: test, labeled: false}
   image_size: 512
-  num_workers: 0                  # Freeze after server preflight; candidate: 4
+  num_workers: 0                  # Baseline unchanged. Compare 8, then 16; measure CPU/I/O and accelerator waits.
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
   preprocessing:
@@ -41,10 +45,13 @@ model:
   dropout: 0.0
   use_age: false
 training:
-  epochs: 80
-  batch_size: 16
-  eval_batch_size: 16
-  accumulation_steps: 2
+  epochs: 80                     # Training budget, not a throughput knob; keep fixed for speed comparisons.
+  batch_size: 16                  # Physical batch. PPU shares memory with DeepSeek; size from measured free/peak memory.
+  eval_batch_size: 16             # FP32 evaluation. Candidate: 32; larger values require a separate memory check.
+  accumulation_steps: 2           # Effective batch = batch_size * accumulation_steps. 16x2 and 32x1 differ in BatchNorm.
+  # Existing preflight: AMP + FP32 reference together <=64 sample instances.
+  # A complete one-group comparison requires batch_size * accumulation_steps <=32.
+  # Larger groups need a separately authorized preflight plan, not an automatic budget increase.
   learning_rate: 0.001
   weight_decay: 0.0001
   betas: [0.9, 0.999]
@@ -52,8 +59,8 @@ training:
   loss: bce
   auto_pos_weight: false
   focal_gamma: 2.0                # Legacy loss factory field; unused for BCE
-  device: cuda:0                 # Explicit CUDA: no automatic CPU fallback
-  amp: true
+  device: cuda:0                 # Logical device in qinghao_ppu_train = physical PPU 4; do not use cuda:4..7.
+  amp: true                      # Preserve FP16 recipe; matrix multiplication PASS is not project AMP acceptance.
   grad_clip: 5.0
   max_consecutive_skips: 8
   scheduler: warmup_cosine_success_v1
@@ -68,3 +75,8 @@ training:
 evaluation:
   threshold: 0.5
   subgroup_fit_samples: 256       # Fit-only deterministic proxy boundary sample
+submission:
+  mode: competition
+  id_column: Image_name
+  value_column: Probability
+  label_column: Pred_Label

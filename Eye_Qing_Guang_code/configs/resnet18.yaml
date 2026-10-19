@@ -1,12 +1,14 @@
-# Paths are resolved against the project root (or --project-root).
+# PPU project (host and qinghao_ppu_train container): /data/workspace/QinghaoLi/Eye_Qing_Guang.
+# Preserve the container's CUDA_VISIBLE_DEVICES=4,5,6,7 and installed PPU framework.
+# Relative paths are resolved against the project root (or --project-root).
 experiment:
-  name: resnet18_image_v1
+  name: resnet18_image_ppu_v1
   seed: 42
   output_root: experiments
 
 data:
-  raw_root: data/raw/glaucoma_first
-  manifest_dir: data/manifests/glaucoma_first_v1
+  raw_root: /data/workspace/KanglongTan/data/glaucoma_first
+  manifest_dir: data/manifests/glaucoma_first_ppu_v1
   image_column: Image_name
   label_column: True_Label
   age_column: Age
@@ -36,16 +38,16 @@ training:
   loss: bce
   auto_pos_weight: false
   focal_gamma: 2.0
-  device: auto
+  device: cuda:0                  # Container logical cuda:0 = physical PPU 4; single-device workflow.
   monitor: roc_auc
   patience: 5
 
 evaluation:
   threshold: 0.5
 
-# Confirm these column names and score type against the official submission
-# template before producing a competition submission.
+# Submission-page format; this legacy pretrained model is not the competition baseline.
 submission:
   id_column: Image_name
-  value_column: probability
-  mode: probability
+  value_column: Probability
+  label_column: Pred_Label
+  mode: competition

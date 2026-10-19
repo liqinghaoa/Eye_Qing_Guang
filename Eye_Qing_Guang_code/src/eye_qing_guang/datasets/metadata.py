@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import copy
 from collections import Counter
 from pathlib import Path
 
@@ -97,6 +98,24 @@ def build_manifests(config: dict, root: Path, output_dir: Path) -> dict:
     output_dir.mkdir(parents=True, exist_ok=False)
     for split, rows in records.items():
         write_csv(output_dir / f"{split}.csv", rows, MANIFEST_FIELDS)
+    write_json(output_dir / "summary.json", summary)
+    return summary
+
+
+def build_test_manifest(config: dict, root: Path, output_dir: Path, decode: bool = False) -> dict:
+    """Build a separate inference-only manifest; never open train or valid."""
+    if output_dir.exists():
+        raise FileExistsError(output_dir)
+    spec = config["data"]["splits"]["test"]
+    if spec["labeled"] is not False:
+        raise ValueError("Official test must be unlabeled.")
+    test_config = copy.deepcopy(config)
+    test_config["data"]["splits"] = {"test": spec}
+    records, counts = collect_records(test_config, root, decode)
+    summary = {"source": "official_test", "purpose": "inference_only",
+               "source_csv": spec["csv"], "splits": counts}
+    output_dir.mkdir(parents=True, exist_ok=False)
+    write_csv(output_dir / "test.csv", records["test"], MANIFEST_FIELDS)
     write_json(output_dir / "summary.json", summary)
     return summary
 

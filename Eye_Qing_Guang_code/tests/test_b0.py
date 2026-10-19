@@ -53,6 +53,7 @@ class B0Test(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="b0_synthetic_")
         self.root = Path(self.temp.name)
         self.config = load_config(ROOT / "configs/b0_resnet50_512_dev_v1.yaml")
+        self.config["data"]["raw_root"] = "data/raw/glaucoma_first"  # Never write to the server dataset.
         torch.set_num_threads(1)
 
     def tearDown(self):

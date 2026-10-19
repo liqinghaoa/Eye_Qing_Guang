@@ -3,6 +3,32 @@
 import math
 
 
+def submission_options(config):
+    """Resolve submission defaults without requiring a section in old checkpoints."""
+    options = config.get("submission", {})
+    allowed = {"id_column", "value_column", "label_column", "mode"}
+    if not isinstance(options, dict) or set(options) - allowed:
+        raise ValueError("Unknown or invalid submission settings.")
+    mode = options.get("mode", "competition")
+    if mode not in {"competition", "probability", "label"}:
+        raise ValueError("submission.mode must be competition, probability or label.")
+    result = {
+        "id_column": "Image_name",
+        "value_column": "Probability" if mode == "competition" else "probability",
+        "label_column": "Pred_Label",
+        **options,
+        "mode": mode,
+    }
+    columns = [result["id_column"], result["value_column"]]
+    if mode == "competition":
+        columns.append(result["label_column"])
+        if columns != ["Image_name", "Probability", "Pred_Label"]:
+            raise ValueError("Competition columns must be Image_name,Probability,Pred_Label.")
+    if any(not isinstance(value, str) or not value.strip() for value in columns) or len(set(columns)) != len(columns):
+        raise ValueError("Submission columns must be nonempty distinct names.")
+    return result
+
+
 def validate_config(config: dict) -> None:
     if not isinstance(config, dict):
         raise ValueError("Configuration root must be a mapping.")
@@ -47,6 +73,7 @@ def validate_config(config: dict) -> None:
         raise ValueError("Unsupported early-stopping metric.")
     if not 0 <= float(config["evaluation"]["threshold"]) <= 1:
         raise ValueError("evaluation.threshold must be in [0, 1].")
+    submission_options(config)
     protocol = config["experiment"].get("protocol")
     if protocol is not None:
         if protocol != "b0_dev_v1":
@@ -65,8 +92,8 @@ def validate_b0(config):
         "training": "epochs batch_size eval_batch_size accumulation_steps learning_rate weight_decay betas eps loss auto_pos_weight focal_gamma device amp grad_clip max_consecutive_skips scheduler schedule_total_epochs warmup_epochs warmup_start_lr min_lr monitor min_epochs min_delta patience",
         "evaluation": "threshold subgroup_fit_samples",
     }
-    if set(config) != set(allowed):
-        raise ValueError("B0 requires exactly the documented configuration sections.")
+    if not set(allowed) <= set(config) or set(config) - set(allowed) - {"submission"}:
+        raise ValueError("B0 requires the documented sections, with optional submission settings.")
     for section, fields in allowed.items():
         if not isinstance(config[section], dict):
             raise ValueError(f"B0 section must be a mapping: {section}")

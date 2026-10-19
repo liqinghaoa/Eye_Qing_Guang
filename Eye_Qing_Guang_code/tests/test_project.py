@@ -34,6 +34,7 @@ class ProjectTest(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="eye_qing_guang_test_")
         self.root = Path(self.temporary.name)
         self.config = copy.deepcopy(load_config(PROJECT_ROOT / "configs/resnet18.yaml"))
+        self.config["data"]["raw_root"] = "data/raw/glaucoma_first"  # Synthetic fixtures stay under self.root.
         self.config["data"]["image_size"] = 32
         self.config["data"]["augmentation"] = {"horizontal_flip": 0.0, "rotation_degrees": 0}
         self.config["model"].update(backbone="tiny_cnn", pretrained=False, use_age=True)
@@ -150,7 +151,7 @@ class ProjectTest(unittest.TestCase):
         duplicate = self.root / "duplicates.csv"
         write_csv(duplicate, [{"image_id": "test_00000.jpg", "probability": 0.1}] * 2)
         with self.assertRaisesRegex(ValueError, "Duplicate"):
-            build_submission(duplicate, source, self.root / "bad.csv")
+            build_submission(duplicate, source, self.root / "bad" / "submission.csv")
 
     def test_full_synthetic_cli_workflow(self):
         self.command("audit", "--output", "audit.json", "--decode-images")

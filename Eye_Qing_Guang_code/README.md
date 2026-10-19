@@ -14,7 +14,7 @@ Eye_Qing_Guang_code/
 │   ├── resnet18.yaml                 # 初始基线，兼容旧实验
 │   └── b0_resnet50_512_dev_v1.yaml    # B0 内部开发实验
 ├── data/
-│   ├── raw/glaucoma_first/           # 原始图像、官方 CSV 及原始划分
+│   ├── raw/glaucoma_first/           # 本地原始布局；PPU服务器数据在 /data/workspace/KanglongTan/data/glaucoma_first
 │   ├── manifests/                    # 版本化的标准样本清单
 │   ├── processed/                    # 后续预处理生成的数据
 │   ├── contracts/dataset.yaml        # 数据字段、标签值及处理约定
@@ -57,18 +57,18 @@ Eye_Qing_Guang_code/
 
 ## 环境安装
 
-要求 Python 3.10+，推荐独立 Python 3.11/3.12 环境。GPU 训练应先按 PyTorch 官方说明安装与驱动匹配的 `torch`、`torchvision`，再安装本项目。以下命令在项目根目录执行：
+要求 Python 3.10+。当前服务器使用已配置的 Podman 个人容器 `qinghao_ppu_train`，项目位于 `/data/workspace/QinghaoLi/Eye_Qing_Guang`。环境以 [PPU服务器与个人训练环境配置说明](PPU服务器与个人训练环境配置说明.md) 为依据：保留镜像内的 Python3.12、PPU适配版PyTorch2.11.0及SDK，不迁入旧3090的Conda环境，也不通过普通PyPI/NVIDIA wheel替换torch、torchvision或CUDA运行库。如需登记或重新安装源码，在已有依赖环境中执行：
 
-```powershell
-cd E:\projects\Eye_Qing_Guang\Eye_Qing_Guang_code
-uv venv --python 3.12
-.\.venv\Scripts\Activate.ps1
-uv pip install -e .
+```bash
+# 在宿主机进入已有个人容器；若已在容器内，跳过这一行。
+podman exec -it qinghao_ppu_train bash
+cd /data/workspace/QinghaoLi/Eye_Qing_Guang
+python -m pip install --no-index --no-deps --no-build-isolation -e .
 ```
 
-Linux 也可使用 `python -m venv .venv`、`source .venv/bin/activate`、`python -m pip install -e .`。
+这里的 `--no-deps --no-build-isolation` 用于保留现有厂商框架；若有缺少的包，先确认具体缺项及兼容版本再补齐，不重新解析并覆盖整套环境。容器已有HTTP/HTTPS代理，本次路径配置不修改代理、镜像、设备映射或现有DeepSeek服务。
 
-已有完整依赖环境可使用 `python -m pip install --no-deps -e .`。开发时也可以将 `src` 加入 `PYTHONPATH`，无需修改其他项目的环境。当前机器默认 Anaconda Python 导入 PyTorch 时存在 OpenMP 冲突；请使用可正常导入 PyTorch 的独立环境，不在项目代码中设置绕过冲突的环境变量。
+开发时也可以将 `src` 加入 `PYTHONPATH`。Windows本机默认Anaconda导入PyTorch曾存在OpenMP冲突；不在项目代码中设置绕过冲突的环境变量。服务器PPU环境应以容器内实际兼容性检查为准。
 
 安装后，脚本与统一命令等价：
 
@@ -80,7 +80,7 @@ python -m eye_qing_guang.cli train --help
 
 ## 数据与评估约定
 
-当前 `data/raw/glaucoma_first/` 内有官方 `train`、`valid`、`test` 三套划分，对应 51,396、5,849、5,855 张图像。训练和验证表包含 `Image_name, Age, True_Label`，测试表只有 `Image_name, Age`。
+两份默认配置的 `data.raw_root` 均为 `/data/workspace/KanglongTan/data/glaucoma_first`，其下直接包含官方 `train.csv`、`valid.csv`、`test.csv` 和 `train/`、`valid/`、`test/` 图像目录，对应 51,396、5,849、5,855 张图像。环境说明给出的 `/data/workspace/KanglongTan/data` 是上级挂载根，本次按用户明确指定的 `glaucoma_first` 子目录读取数据。训练和验证表包含 `Image_name, Age, True_Label`，测试表只有 `Image_name, Age`。Windows本地若要读取比赛数据，需另用配置指定本地 `raw_root`；合成测试会显式改用临时目录，不访问服务器原始数据。
 
 - 清单保留官方 `Image_name` 作为 `image_id`；实际文件路径写入 `image_path`，解决 CSV 的 `.jpg` 和磁盘 `.JPG` 大小写差异。
 - 标签只接受 `0/1`。模型输出一个 logit，`sigmoid(logit)` 表示 `True_Label=1` 的概率，临床语义以比赛说明为准。
@@ -91,7 +91,9 @@ python -m eye_qing_guang.cli train --help
 
 ## 使用流程
 
-配置中的相对路径、命令参数中的数据/输出路径都相对于项目根目录解析；可用 `--project-root` 指定另一份项目或数据布局。每条命令均支持 `--help`。以下命令供正式实验使用，搭建阶段不会自动执行它们。
+项目根目录由安装位置自动识别；服务器宿主机和容器中均为 `/data/workspace/QinghaoLi/Eye_Qing_Guang`，无需将Linux路径写死到Python源码。该目录应直接包含 `configs/`、`scripts/`、`src/` 和 `pyproject.toml`。配置和命令中的相对路径均相对于项目根目录解析，可用 `--project-root` 显式指定；绝对路径按原值使用，`--project-root` 不会重定向绝对的 `data.raw_root`。
+
+原始数据保留在共享的数据挂载目录。生成的清单仍放在项目内的 `data/manifests/`：B0使用 `/data/workspace/QinghaoLi/Eye_Qing_Guang/data/manifests/glaucoma_b0_dev_ppu_v1`，ResNet18使用同级的 `glaucoma_first_ppu_v1`，独立测试清单示例为 `glaucoma_official_test_ppu_v1`。实验输出根为 `/data/workspace/QinghaoLi/Eye_Qing_Guang/experiments`，无需额外创建统一outputs目录。外部原始图像写入清单时使用实际绝对路径；已有3090清单及检查点不自动改写，后续获准生成时使用新的PPU清单版本，核对来源和相同的内部样本划分。每条命令均支持 `--help`；以下命令供相应实验阶段使用，不会自动执行。
 
 ### 1. 审计数据并生成清单
 
@@ -100,12 +102,12 @@ python scripts/preprocess/audit_dataset.py --output data/manifests/audit_v1.json
 python scripts/preprocess/build_manifest.py
 ```
 
-审计检查必要列、标签、年龄、标识唯一性和图像路径；增加 `--decode-images` 可逐张验证图像解码。发现错误时立即停止并报告首个错误。清单生成后，`data/manifests/glaucoma_first_v1/` 包含 `train.csv`、`valid.csv`、`test.csv` 和 `summary.json`。已有清单版本拒绝覆盖；改版需同时修改 `data.manifest_dir`，或通过 `--output-dir` 指定新目录并同步配置。
+审计检查必要列、标签、年龄、标识唯一性和图像路径；增加 `--decode-images` 可逐张验证图像解码。发现错误时立即停止并报告首个错误。清单生成后，`data/manifests/glaucoma_first_ppu_v1/` 包含 `train.csv`、`valid.csv`、`test.csv` 和 `summary.json`。已有清单版本拒绝覆盖；改版需同时修改 `data.manifest_dir`，或通过 `--output-dir` 指定新目录并同步配置。
 
 ### 2. 训练基线
 
 ```powershell
-python scripts/train/run_binary_classification.py --config configs/resnet18.yaml --name resnet18_image_v1
+python scripts/train/run_binary_classification.py --config configs/resnet18.yaml --name resnet18_image_ppu_v1
 ```
 
 支持 `resnet18`、`resnet50`、`efficientnet_b0`。`tiny_cnn` 供离线流程验证，必须设置 `pretrained: false`。默认 ResNet18 使用 ImageNet 预训练，首次正式训练可能下载权重；离线运行可在配置中关闭。当前未做模型优劣比较。
@@ -117,8 +119,8 @@ python scripts/train/run_binary_classification.py --config configs/resnet18.yaml
 ### 3. 评估与汇总
 
 ```powershell
-python scripts/evaluate/evaluate_checkpoint.py --checkpoint experiments/resnet18_image_v1/checkpoints/best.pt --output-dir experiments/resnet18_image_v1/reports/valid_best
-python scripts/evaluate/summarize_experiment.py --experiments experiments/resnet18_image_v1 --output experiments/summary_v1.csv
+python scripts/evaluate/evaluate_checkpoint.py --checkpoint experiments/resnet18_image_ppu_v1/checkpoints/best.pt --output-dir experiments/resnet18_image_ppu_v1/reports/valid_best
+python scripts/evaluate/summarize_experiment.py --experiments experiments/resnet18_image_ppu_v1 --output experiments/summary_v1.csv
 ```
 
 评估读取检查点内的模型和预处理配置，避免外部 YAML 改动导致不一致；支持 `--split train` 或默认 `valid`，用 `--manifest` 指定另一份同格式清单。输出指标、逐样本预测及运行记录。`best.pt` 的官方验证集成绩是选模成绩，不应解释为独立测试性能。
@@ -126,18 +128,38 @@ python scripts/evaluate/summarize_experiment.py --experiments experiments/resnet
 ### 4. 测试集预测与提交转换
 
 ```powershell
-python scripts/infer/predict_test.py --checkpoint experiments/resnet18_image_v1/checkpoints/best.pt --output-dir experiments/resnet18_image_v1/predictions/test_best
-python scripts/submit/build_submission.py --predictions experiments/resnet18_image_v1/predictions/test_best/test_predictions.csv --output experiments/resnet18_image_v1/predictions/submission_v1.csv
+python scripts/infer/predict_test.py --checkpoint experiments/resnet18_image_ppu_v1/checkpoints/best.pt --output-dir experiments/resnet18_image_ppu_v1/predictions/test_best
+python scripts/submit/build_submission.py --predictions experiments/resnet18_image_ppu_v1/predictions/test_best/test_predictions.csv --output experiments/resnet18_image_ppu_v1/predictions/submission.csv
 ```
 
-内部预测字段为 `image_id,probability`。提交转换严格匹配官方测试 CSV 的标识和行序，检查缺失、多余、重复标识和概率范围。默认输出 `Image_name,probability`，**该格式是工程默认值，须确认官方提交模板后调整**。可在 `submission` 配置或 `--id-column`、`--value-column`、`--mode probability|label` 中指定字段和分数类型；此命令只生成本地 CSV。
+内部无标签预测字段为 `image_id,logit,probability`。当前配置采用 `submission.mode: competition`，按本地《大数据挑战赛 - 提交作品》摘录输出 UTF-8 CSV，固定表头为 `Image_name,Probability,Pred_Label`，文件名必须为 `submission.csv`。`Pred_Label` 由未取整的概率按配置阈值计算，默认 `Probability >= 0.5` 为1；保留概率数值，不用类别标签替代排序分数。转换严格匹配官方测试 CSV 的标识和行序，拒绝缺失、多余、重复、空标识以及非有限或越界概率，拒绝覆盖已有文件。样本数以官方测试 CSV 为准，本次数据应为5855行（不含表头）。
+
+旧二列导出仅在显式设置 `--mode probability|label` 或加载旧版二列 `submission` 配置时保留，不作为当前比赛格式。`--id-column`、`--value-column`、`--label-column` 可覆盖配置，但比赛模式拒绝不符合上述固定表头的列名。旧B0配置/检查点没有 `submission` 节时，默认使用比赛三列模式；新增节只影响提交格式，不改变训练协议或预处理。
+
+初始ResNet18配置启用ImageNet预训练；本地提交页未明确授权外部预训练，不能据此认定其合规。比赛默认研究路径使用随机初始化的B0。初赛只提交结果CSV，Conda环境压缩包、内部开发预测和整个实验目录均不属于初赛提交内容。
+
+### 4.1 B0 的独立测试清单与提交路径
+
+B0开发清单仍只包含官方train划出的内部拟合/开发部分，不自动读取官方test。后续明确进入测试预测阶段时，在工程根目录使用独立命令生成新版本测试清单；它只读取官方test表和图像路径，不读取train/valid，不修改内部划分，不运行模型。可选 `--decode-images` 完整解码测试图片；默认只检查元数据和路径。
+
+```bash
+python scripts/preprocess/build_test_manifest.py --config configs/b0_resnet50_512_dev_v1.yaml --output-dir data/manifests/glaucoma_official_test_ppu_v1
+python scripts/infer/predict_test.py --checkpoint experiments/b0_resnet50_512_dev_ppu_s42_v1/checkpoints/best_inference.pt --manifest data/manifests/glaucoma_official_test_ppu_v1/test.csv --output-dir experiments/b0_resnet50_512_dev_ppu_s42_v1/predictions/test_best_v1
+python scripts/submit/build_submission.py --config configs/b0_resnet50_512_dev_v1.yaml --predictions experiments/b0_resnet50_512_dev_ppu_s42_v1/predictions/test_best_v1/test_predictions.csv --output experiments/b0_resnet50_512_dev_ppu_s42_v1/predictions/test_best_v1/submission.csv
+```
+
+以上为未来阶段命令示例，不会随训练自动执行。`test-manifest` 的输出目录必须与开发清单分开，已有目录拒绝覆盖。B0预测必须显式提供 `--manifest`，避免误将内部开发集当作测试集。B0-dev检查点仍是内部选模结果；此入口不替代B0-fit，也不自动训练、提交或将内部成绩标记为官方成绩。
+
+复赛还需实际核对精简模型文件及所有必需模型文件压缩前总大小≤500MB，并在文档指定的T4 16GB、Python3.12、PyTorch2.10.0/torchvision0.25.0、CUDA12.8/cuDNN9环境验证加载、预测一致性及单图端到端延迟≤100ms。3090训练环境与预检中的短程未预热耗时均不能代替该验收，当前未完成这些实测。官方AUPRC的积分定义未在可读文字中说明，工程AP仍按average precision单列，不声称二者完全等同。
+
+按本地提交页末尾细则：每天最多一次成功出分；待评分期间不可继续提交，报错可重试但当天最多两次。截止时间记载为2026年11月6日23:59；实际提交前应复核页面最新要求。本项目命令只生成本地文件，不调用平台上传。
 
 ### 5. 可视化
 
 ```powershell
-python scripts/visualize/plot_training_curves.py --history experiments/resnet18_image_v1/reports/history.csv --output experiments/resnet18_image_v1/figures/training_v1.png
-python scripts/visualize/plot_confusion_matrix.py --metrics experiments/resnet18_image_v1/reports/valid_best/metrics.json --output experiments/resnet18_image_v1/figures/confusion_v1.png
-python scripts/visualize/generate_gradcam.py --checkpoint experiments/resnet18_image_v1/checkpoints/best.pt --image data/raw/glaucoma_first/valid/valid_00000.JPG --age 61 --output experiments/resnet18_image_v1/figures/gradcam_v1.png
+python scripts/visualize/plot_training_curves.py --history experiments/resnet18_image_ppu_v1/reports/history.csv --output experiments/resnet18_image_ppu_v1/figures/training_v1.png
+python scripts/visualize/plot_confusion_matrix.py --metrics experiments/resnet18_image_ppu_v1/reports/valid_best/metrics.json --output experiments/resnet18_image_ppu_v1/figures/confusion_v1.png
+python scripts/visualize/generate_gradcam.py --checkpoint experiments/resnet18_image_ppu_v1/checkpoints/best.pt --image /data/workspace/KanglongTan/data/glaucoma_first/valid/valid_00000.JPG --age 61 --output experiments/resnet18_image_ppu_v1/figures/gradcam_v1.png
 ```
 
 Grad-CAM 默认解释标签 1；`--class-index 0` 解释标签 0。年龄融合模型的 `--age` 应使用样本实际年龄，省略时按训练集缺失值规则处理。输出为缩放后图像上的 PNG 热图，用于模型检查。
@@ -154,18 +176,21 @@ python -m unittest discover -s tests -v
 
 ## B0-dev 服务器运行
 
-实现依据为研究目录中的 `03_Method_and_Experiment/B0_ResNet50_512_基线实验实现方案_v1.md`。本次交付的是 seed=42 的实现文件；本地没有生成比赛内部划分、启动比赛训练、访问官方 valid 选模或预测比赛 test。真实图像检查与目标服务器显存/吞吐尚待以下预检，不能把合成测试解释为资源验收或性能结果。
+实现依据为研究目录中的 `03_Method_and_Experiment/B0_ResNet50_512_基线实验实现方案_v1.md`。PPU配置仍为 seed=42 的单卡B0开发协议。本次路径与配置更新没有生成清单、运行PPU预检、训练或推理；环境说明记录的矩阵计算通过不等于项目的ResNet50、FP16 AMP或吞吐验收通过。
 
 配置 `configs/b0_resnet50_512_dev_v1.yaml` 固定：随机初始化 torchvision ResNet50，全网络训练，2048→1 单头，dropout=0，图像单输入；普通 BCE、pos_weight=1、自然比例随机遍历、不丢尾批。训练 physical batch=16、累积=2，评估 batch=16；AdamW 的峰值 lr=1e-3、weight_decay=1e-4、betas=(0.9,0.999)、eps=1e-8。最多80轮，最短30轮允许早停，patience=15，min_delta=1e-4。配置中的关键字段会被校验，拼错或未实现的 B0 字段会报错。
 
-保持当前项目目录复制到服务器，原始图像仍在 `data/raw/glaucoma_first`；相对路径无需改写为 Windows 路径。安装与服务器驱动匹配的 PyTorch 后，在工程根目录执行：
+当前配置适配个人容器 `qinghao_ppu_train`：源码为 `/data/workspace/QinghaoLi/Eye_Qing_Guang`，原始图像与CSV为 `/data/workspace/KanglongTan/data/glaucoma_first`。容器已固定 `CUDA_VISIBLE_DEVICES=4,5,6,7`，内部逻辑 `cuda:0/1/2/3` 分别对应物理PPU4/5/6/7。默认 `training.device: cuda:0` 使用物理PPU4；不要在进入容器后重新覆盖 `CUDA_VISIBLE_DEVICES`，也不要填写 `cuda:4～7` 或用逗号设备列表代替当前单设备参数。本项目未接入DDP，本次不启动多卡，也不操作 `ds41` 服务。
+
+以下仅列出后续相应阶段的命令示例，本次不执行：
 
 ```bash
-python -m pip install -e .
+cd /data/workspace/QinghaoLi/Eye_Qing_Guang
+python -m pip install --no-index --no-deps --no-build-isolation -e .
 python -m unittest discover -s tests -v
-python scripts/preprocess/audit_dataset.py --config configs/b0_resnet50_512_dev_v1.yaml --decode-images --output data/manifests/b0_train_audit_v1.json
+python scripts/preprocess/audit_dataset.py --config configs/b0_resnet50_512_dev_v1.yaml --decode-images --output data/manifests/b0_train_audit_ppu_v1.json
 python scripts/preprocess/build_development_manifest.py --config configs/b0_resnet50_512_dev_v1.yaml
-python scripts/train/preflight_b0.py --config configs/b0_resnet50_512_dev_v1.yaml
+python scripts/train/preflight_b0.py --config configs/b0_resnet50_512_dev_v1.yaml --name b0_resnet50_512_preflight_ppu_s42_v1
 ```
 
 以上最后一条是有界预检，**不是正式训练**：仅内部拟合子集，训练与FP32梯度对照合计最多64个样本实例、最多4个累积组；FP32对照即使不执行优化器step也保守计入一个组。默认先用16×2=32个实例完成AMP累积更新，再从相同初始权重和BatchNorm状态对同一组增强后的微批次执行32个实例的FP32样本加权前反向。重复喂入的对照样本也计数。两条路径使用相同物理微批次，不把不同BatchNorm批次的梯度要求为逐位一致。
@@ -190,7 +215,7 @@ train_00002.jpg,confirmed_duplicate,D001
 
 支持 `patient`、`examination`、`confirmed_duplicate`。上例三张图会在同一个连通组中；同一图可有多条关联。没有可信患者ID时保留“未能排除同一患者双眼跨划分”的限制，不推断患者身份，也不自动以视觉相似度合并样本。新增关联必须生成新清单版本。
 
-检查 `experiments/b0_resnet50_512_preflight_s42_v1/figures/` 后，再冻结资源配置。对照图只是候选，需确认覆盖正常曝光、极暗、强反光、宽黑边、偏心和非方形案例；不足时先补充有界人工检查，不据少量例子宣称 FOV 已全面通过。原方案最多24张人工候选。若显存不足，预检失败并保留进度，不切CPU、不自动减batch、不更换损失；在正式开始前显式修订并记录物理batch、累积、eval batch与workers。若FOV规则不可靠，应另立“原图等比填充”变体，不能静默修改 `fov_letterbox_v1`。
+检查 `experiments/b0_resnet50_512_preflight_ppu_s42_v1/figures/` 后，再冻结资源配置。对照图只是候选，需确认覆盖正常曝光、极暗、强反光、宽黑边、偏心和非方形案例；不足时先补充有界人工检查，不据少量例子宣称 FOV 已全面通过。原方案最多24张人工候选。若显存不足，预检失败并保留进度，不切CPU、不自动减batch、不更换损失；在正式开始前显式修订并记录物理batch、累积、eval batch与workers。若FOV规则不可靠，应另立“原图等比填充”变体，不能静默修改 `fov_letterbox_v1`。
 
 预检数值和图像检查通过后，由你在服务器启动正式训练：
 
@@ -198,7 +223,24 @@ train_00002.jpg,confirmed_duplicate,D001
 python scripts/train/run_binary_classification.py --config configs/b0_resnet50_512_dev_v1.yaml
 ```
 
-预检与正式目录分别是 `b0_resnet50_512_preflight_s42_v1` 和 `b0_resnet50_512_dev_s42_v1`。已有目录拒绝覆盖，失败运行保留原产物，新版本需要新名称；当前无 `--resume`，不承诺中断后无缝恢复。请保留训练开始时记录的源码版本与环境，特别是 Pillow、torchvision、scikit-learn 版本；不同 scikit-learn 版本导致来源记录变化时不会静默接受旧划分，应保留原环境或另定新清单版本。
+按上述显式 `--name` 运行时，PPU预检与正式目录分别是 `b0_resnet50_512_preflight_ppu_s42_v1` 和 `b0_resnet50_512_dev_ppu_s42_v1`。已有目录拒绝覆盖，失败运行保留原产物，新版本需要新名称；当前无 `--resume`，不承诺中断后无缝恢复。请保留训练开始时记录的源码版本与环境，特别是 Pillow、torchvision、scikit-learn 版本；不同 scikit-learn 版本导致来源记录变化时不会静默接受旧划分，应保留原环境或另定新清单版本。
+
+### PPU 单卡资源参数调整
+
+YAML已标注资源参数的位置，本次仍保留workers=0、physical batch=16、累积=2、eval batch=16、FP16 AMP开启作为未测速起点。单卡总显存144GiB并非本任务独占；按环境说明，DeepSeek也在所分配的物理PPU4～7上运行，显存余量及计算负载会变化，不能把历史剩余显存当作固定额度。
+
+| 参数 | 后续可比较的设置 | 对实验的影响 |
+| --- | --- | --- |
+| `data.num_workers` | 先比较0与8，再视CPU/I/O测试16 | 可能改变增强随机序列；不是越多越快 |
+| `training.eval_batch_size` | 16→32，有余量时另测更大值 | FP32验证显存需单独确认，不能按AMP训练估算 |
+| `training.batch_size` + `accumulation_steps` | 16×2；资源允许时另测32×1 | 名义有效batch相同，但BatchNorm行为不同，需记录物理batch |
+| `training.device` | 逻辑cuda:0～3中的一个 | 仅选一张获准的物理PPU，不启用DDP |
+| `training.amp` | 保持true | 切换BF16/FP32不是当前B0吞吐参数，应另立变体 |
+| `experiment.name` | 每个资源组合使用新名称 | 防止覆盖并保留配置快照，不复用旧3090实验目录 |
+
+已有预检预算是AMP及FP32参考合计64个样本实例，因此一次完整对照要求有效batch≤32，且仍可能因溢出跳步而预算不足。64×1会没有FP32对照预算，64×2超过单组预算；不要通过改名反复预检或静默扩大预算。后续扩大目标batch需要另定验证安排。
+
+速度比较保持图像尺寸、FOV/增强、学习率、scheduler和轮数预算一致，一次只改变一个资源因素；改变有效batch还会改变每轮更新组数及调度步数。可读取已有 `reports/epoch_XXXX.json` 的 `train_seconds`、`consumed_samples_per_second`、`epoch_seconds` 和显存峰值；`epoch_seconds`包含训练与内部验证，不含随后保存检查点及最终分析。预检会预先缓存用于AMP/FP32对照的增强张量，它的短程吞吐不能代替持续在线数据管线的吞吐。共享PPU上还应记录同时段服务负载；本进程峰值显存不是整卡总占用，不根据一组数字承诺提速。
 
 B0 输入顺序是确定性 FOV → 训练时水平翻转/双线性 expand 旋转/固定先亮度后对比度 → Pillow双线性等比缩放/黑色居中填充 → Tensor/0.5归一化。检测预览和最终画布都采用 round-half-up；FOV面积与前景覆盖不足时回退原图。旧配置/旧检查点缺少新版本字段时继续使用旧直接 Resize，绝不重新解释。训练、评估和加载后的推理复用同一变换。
 

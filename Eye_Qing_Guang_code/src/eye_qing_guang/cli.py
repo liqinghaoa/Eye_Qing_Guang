@@ -17,6 +17,7 @@ def build_parser():
         ("audit", "Audit raw tables and image paths"),
         ("manifest", "Build normalized manifests"),
         ("development", "Build B0 internal fit/development manifests from official train only"),
+        ("test-manifest", "Build a separate unlabeled official-test manifest for inference only"),
         ("preflight", "Run budget-limited B0 CUDA updates and an FP32 gradient reference"),
         ("train", "Train and select a validation checkpoint"),
         ("evaluate", "Evaluate a checkpoint on labeled data"),
@@ -29,15 +30,18 @@ def build_parser():
     ):
         command = commands.add_parser(name, help=description, description=description)
         command.add_argument("--project-root", type=Path, default=PROJECT_ROOT)
-        if name in {"audit", "manifest", "train", "submit", "development", "preflight"}:
+        if name in {"audit", "manifest", "train", "submit", "development", "preflight", "test-manifest"}:
             command.add_argument("--config", default="configs/resnet18.yaml")
-            if name in {"development", "preflight"}:
+            if name in {"development", "preflight", "test-manifest"}:
                 command.set_defaults(config="configs/b0_resnet50_512_dev_v1.yaml")
         if name == "audit":
             command.add_argument("--output", required=True)
             command.add_argument("--decode-images", action="store_true")
         elif name == "manifest":
             command.add_argument("--output-dir", help="New directory; default: data.manifest_dir")
+        elif name == "test-manifest":
+            command.add_argument("--output-dir", required=True, help="New directory, separate from development manifests")
+            command.add_argument("--decode-images", action="store_true")
         elif name == "preflight":
             command.add_argument("--name", default="b0_resnet50_512_preflight_s42_v1")
         elif name == "train":
@@ -64,7 +68,9 @@ def build_parser():
             command.add_argument("--test-csv")
             command.add_argument("--id-column")
             command.add_argument("--value-column")
-            command.add_argument("--mode", choices=["probability", "label"])
+            command.add_argument("--label-column")
+            command.add_argument("--mode", choices=["competition", "probability", "label"],
+                                 help="competition: fixed three-column submission.csv; other modes: legacy two-column export")
             command.add_argument("--output", required=True)
         elif name == "curves":
             command.add_argument("--history", required=True)
@@ -111,6 +117,13 @@ def main(argv=None):
 
         summary = build_manifests(config, root, path(args.output_dir or config["data"]["manifest_dir"]))
         print(json.dumps(summary, indent=2))
+    elif args.command == "test-manifest":
+        from eye_qing_guang.datasets.metadata import build_test_manifest
+
+        output = path(args.output_dir)
+        if output == path(config["data"]["manifest_dir"]):
+            raise ValueError("Official-test manifests require a separate output directory.")
+        print(json.dumps(build_test_manifest(config, root, output, args.decode_images), indent=2))
     elif args.command == "development":
         if config["experiment"].get("protocol") != "b0_dev_v1":
             raise ValueError("development requires a B0-dev configuration.")
@@ -146,14 +159,20 @@ def main(argv=None):
     elif args.command == "submit":
         from eye_qing_guang.pipelines.inference import build_submission
 
-        data, submission = config["data"], config["submission"]
+        from eye_qing_guang.contracts.config import submission_options
+
+        overrides = {key: value for key, value in {
+            "id_column": args.id_column, "value_column": args.value_column,
+            "label_column": args.label_column, "mode": args.mode,
+        }.items() if value is not None}
+        submission = submission_options({"submission": {**config.get("submission", {}), **overrides}})
+        data = config["data"]
         source = (path(args.test_csv) if args.test_csv else
                   path(data["raw_root"]) / data["splits"]["test"]["csv"])
         print(build_submission(
             path(args.predictions), source, path(args.output),
-            args.id_column or submission["id_column"],
-            args.value_column or submission["value_column"], data["image_column"],
-            args.mode or submission["mode"], float(config["evaluation"]["threshold"]),
+            submission["id_column"], submission["value_column"], data["image_column"],
+            submission["mode"], float(config["evaluation"]["threshold"]), submission["label_column"],
         ))
     elif args.command == "summarize":
         from eye_qing_guang.metrics.aggregation import summarize_experiments
