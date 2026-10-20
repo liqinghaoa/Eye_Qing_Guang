@@ -1,0 +1,109 @@
+# Resume epoch_0017.pt with --resume-from. Keep batch128 / accumulation1 / eval128 / workers8.
+experiment:
+  name: b0_resnet50_512_dev_ddp4_ppu_fp32_resume17_diag_s42_v3
+  protocol: b0_dev_ddp_v1
+  seed: 42
+  output_root: experiments
+distributed:
+  enabled: true
+  world_size: 4
+  backend: nccl
+  timeout_seconds: 180
+  log_every_n_groups: 10
+  multiprocessing_context: spawn
+data:
+  raw_root: /data/workspace/KanglongTan/data/glaucoma_first
+  manifest_dir: data/manifests/glaucoma_b0_dev_ppu_v1
+  image_column: Image_name
+  label_column: True_Label
+  age_column: Age
+  splits:
+    train:
+      csv: train.csv
+      images: train
+      labeled: true
+    valid:
+      csv: valid.csv
+      images: valid
+      labeled: true
+    test:
+      csv: test.csv
+      images: test
+      labeled: false
+  image_size: 512
+  num_workers: 8
+  mean:
+  - 0.5
+  - 0.5
+  - 0.5
+  std:
+  - 0.5
+  - 0.5
+  - 0.5
+  preprocessing:
+    version: fov_letterbox_v1
+    preview_size: 512
+    threshold: 8
+    min_line_fraction: 0.01
+    margin: 0.02
+    min_area: 0.5
+    min_coverage: 0.995
+  augmentation:
+    horizontal_flip: 0.5
+    rotation_degrees: 10
+    brightness:
+    - 0.9
+    - 1.1
+    contrast:
+    - 0.9
+    - 1.1
+development:
+  split_seed: 20261018
+  associations_csv: null
+model:
+  backbone: resnet50
+  pretrained: false
+  dropout: 0.0
+  use_age: false
+training:
+  epochs: 80
+  batch_size: 128
+  eval_batch_size: 128
+  accumulation_steps: 1
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  betas:
+  - 0.9
+  - 0.999
+  eps: 1.0e-08
+  loss: bce
+  auto_pos_weight: false
+  focal_gamma: 2.0
+  device: cuda
+  amp: false
+  precision: fp32
+  grad_clip: 5.0
+  max_consecutive_skips: 8
+  scheduler: warmup_cosine_success_v1
+  schedule_total_epochs: 80
+  warmup_epochs: 5
+  warmup_start_lr: 0.0001
+  min_lr: 1.0e-06
+  monitor: roc_auc
+  min_epochs: 30
+  min_delta: 0.0001
+  patience: 15
+evaluation:
+  threshold: 0.5
+  subgroup_fit_samples: 256
+submission:
+  mode: competition
+  id_column: Image_name
+  value_column: Probability
+  label_column: Pred_Label
+diagnostics:
+  enabled: true
+  data_timeout_seconds: 90
+  stack_timeout_seconds: 60
+  device_poll_seconds: 10
+  device_poll_timeout_seconds: 5

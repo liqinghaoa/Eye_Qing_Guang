@@ -6,11 +6,19 @@ import torch
 
 
 @torch.inference_mode()
-def predict_batches(model, loader, device, criterion=None):
+def predict_batches(model, loader, device, criterion=None, allow_empty=False, diagnostics=None):
     model.eval()
     rows = []
     total, count = 0.0, 0
-    for batch in loader:
+    if diagnostics is not None:
+        diagnostics.mark("evaluation_iterator_initialization")
+    iterator = iter(loader)
+    for index in range(len(loader)):
+        if diagnostics is not None:
+            diagnostics.mark("evaluation_data_wait", evaluation_batch=index + 1)
+        batch = next(iterator)
+        if diagnostics is not None:
+            diagnostics.mark("evaluation_forward", actual_image_ids=list(batch["image_id"]))
         images, ages = batch["image"].to(device), batch["age"].to(device)
         if not torch.isfinite(images).all():
             raise FloatingPointError("Non-finite evaluation inputs.")
@@ -32,6 +40,8 @@ def predict_batches(model, loader, device, criterion=None):
                 row["label"] = int(batch["label"][index].item())
             rows.append(row)
         count += len(images)
-    if not count:
+    if diagnostics is not None:
+        diagnostics.mark("evaluation_complete", evaluated_samples=count, memory=True)
+    if not count and not allow_empty:
         raise ValueError("Empty evaluation loader.")
-    return rows, total / count if criterion is not None else None
+    return rows, total / count if criterion is not None and count else None

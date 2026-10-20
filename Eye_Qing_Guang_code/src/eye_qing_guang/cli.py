@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 from pathlib import Path
 
 from eye_qing_guang.utils.paths import PROJECT_ROOT, resolve_path
@@ -18,7 +19,8 @@ def build_parser():
         ("manifest", "Build normalized manifests"),
         ("development", "Build B0 internal fit/development manifests from official train only"),
         ("test-manifest", "Build a separate unlabeled official-test manifest for inference only"),
-        ("preflight", "Run budget-limited B0 CUDA updates and an FP32 gradient reference"),
+        ("preflight", "Run a bounded B0 FP32 check or reference-first mixed-precision check"),
+        ("ddp-check", "Check the assigned four PPU devices and collective communication without training data"),
         ("train", "Train and select a validation checkpoint"),
         ("evaluate", "Evaluate a checkpoint on labeled data"),
         ("summarize", "Summarize experiment metric reports"),
@@ -30,10 +32,12 @@ def build_parser():
     ):
         command = commands.add_parser(name, help=description, description=description)
         command.add_argument("--project-root", type=Path, default=PROJECT_ROOT)
-        if name in {"audit", "manifest", "train", "submit", "development", "preflight", "test-manifest"}:
+        if name in {"audit", "manifest", "train", "submit", "development", "preflight", "test-manifest", "ddp-check"}:
             command.add_argument("--config", default="configs/resnet18.yaml")
             if name in {"development", "preflight", "test-manifest"}:
                 command.set_defaults(config="configs/b0_resnet50_512_dev_v1.yaml")
+            if name == "ddp-check":
+                command.set_defaults(config="configs/b0_resnet50_512_dev_ddp4_ppu_v1.yaml")
         if name == "audit":
             command.add_argument("--output", required=True)
             command.add_argument("--decode-images", action="store_true")
@@ -43,9 +47,13 @@ def build_parser():
             command.add_argument("--output-dir", required=True, help="New directory, separate from development manifests")
             command.add_argument("--decode-images", action="store_true")
         elif name == "preflight":
-            command.add_argument("--name", default="b0_resnet50_512_preflight_s42_v1")
+            command.add_argument("--name", help="New preflight directory, separate from formal training")
+            command.add_argument("--max-sample-instances", type=int, default=64,
+                                 help="DDP: explicit global budget including FP32 reference; default 64")
+            command.add_argument("--max-groups", type=int, default=4, help="DDP: global attempts including FP32 reference")
         elif name == "train":
             command.add_argument("--name", help="Unique experiment directory name")
+            command.add_argument("--resume-from", help="Completed-epoch DDP training checkpoint; requires a new output directory")
         elif name in {"evaluate", "predict", "gradcam"}:
             command.add_argument("--checkpoint", required=True)
             command.add_argument("--device", default="auto")
@@ -93,6 +101,7 @@ def main(argv=None):
         from eye_qing_guang.utils.experiment_io import load_config
 
         config = load_config(path(args.config))
+    from eye_qing_guang.contracts.config import is_b0
     if args.command == "audit":
         from eye_qing_guang.datasets.metadata import collect_records
         from eye_qing_guang.utils.experiment_io import run_manifest, write_json
@@ -102,7 +111,7 @@ def main(argv=None):
             raise FileExistsError(output)
         try:
             audit_config = copy.deepcopy(config)
-            if config["experiment"].get("protocol") == "b0_dev_v1":
+            if is_b0(config):
                 audit_config["data"]["splits"] = {"train": config["data"]["splits"]["train"]}
             _, summary = collect_records(audit_config, root, args.decode_images)
         except Exception as exc:
@@ -111,7 +120,7 @@ def main(argv=None):
         write_json(output, run_manifest("completed", splits=summary))
         print(json.dumps(summary, indent=2))
     elif args.command == "manifest":
-        if config["experiment"].get("protocol") == "b0_dev_v1":
+        if is_b0(config):
             raise ValueError("Use the development command for B0, never the official-split manifest command.")
         from eye_qing_guang.datasets.metadata import build_manifests
 
@@ -125,15 +134,25 @@ def main(argv=None):
             raise ValueError("Official-test manifests require a separate output directory.")
         print(json.dumps(build_test_manifest(config, root, output, args.decode_images), indent=2))
     elif args.command == "development":
-        if config["experiment"].get("protocol") != "b0_dev_v1":
+        if not is_b0(config):
             raise ValueError("development requires a B0-dev configuration.")
         from eye_qing_guang.datasets.development import build_development_manifests
 
         print(json.dumps(build_development_manifests(config, root, path(config["data"]["manifest_dir"])), indent=2))
     elif args.command == "preflight":
-        from eye_qing_guang.pipelines.preflight import preflight
+        if config["experiment"].get("protocol") == "b0_dev_ddp_v1":
+            from eye_qing_guang.pipelines.distributed_preflight import preflight_distributed
 
-        directory = preflight(config, root, args.name)
+            directory = preflight_distributed(config, root, args.name or "b0_resnet50_512_preflight_ddp4_ppu_s42_v1",
+                                               args.max_sample_instances, args.max_groups)
+            if os.environ.get("RANK", "0") != "0":
+                return
+        else:
+            if args.max_sample_instances != 64 or args.max_groups != 4:
+                raise ValueError("Single-card preflight retains its frozen 64-instance/4-group limits.")
+            from eye_qing_guang.pipelines.preflight import preflight
+
+            directory = preflight(config, root, args.name or "b0_resnet50_512_preflight_s42_v1")
         print(directory)
         with (directory / "run_manifest.json").open(encoding="utf-8") as handle:
             status = json.load(handle)["status"]
@@ -141,10 +160,16 @@ def main(argv=None):
             # An inconclusive preflight must not let a shell command chain
             # start formal training automatically.
             raise SystemExit(2)
+    elif args.command == "ddp-check":
+        from eye_qing_guang.utils.distributed import communication_check
+
+        communication_check(config)
     elif args.command == "train":
         from eye_qing_guang.pipelines.training import train
 
-        print(train(config, root, args.name))
+        directory = train(config, root, args.name, resume_from=path(args.resume_from) if args.resume_from else None)
+        if config["experiment"].get("protocol") != "b0_dev_ddp_v1" or os.environ.get("RANK", "0") == "0":
+            print(directory)
     elif args.command == "evaluate":
         from eye_qing_guang.pipelines.evaluation import evaluate_checkpoint
 

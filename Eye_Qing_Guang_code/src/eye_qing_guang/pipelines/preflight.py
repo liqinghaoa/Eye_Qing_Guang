@@ -46,6 +46,7 @@ class ReplayLoader:
         self.batches = batches
         self.batch_size = batch_size
         self.dataset = range(sum(len(batch["image"]) for batch in batches))
+        self.sampler = range(len(self.dataset))
 
     def __len__(self):
         return len(self.batches)

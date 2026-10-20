@@ -441,13 +441,13 @@ rw
 宿主机：
 
 ```text
-/data/workspace/QinghaoLi/Eye_Qing_Guang
+/home/KanglongTan/QinghaoLi/Eye_Qing_Guang
 ```
 
 容器内保持完全相同路径：
 
 ```text
-/data/workspace/QinghaoLi/Eye_Qing_Guang
+/home/KanglongTan/QinghaoLi/Eye_Qing_Guang
 ```
 
 挂载方式：
@@ -469,7 +469,9 @@ rw
 
 ---
 
-## 13. 目录挂载验证结果
+## 13. 目录挂载验证结果（迁移前记录）
+
+2026-10-20：用户将当前项目目录调整为 `/home/KanglongTan/QinghaoLi/Eye_Qing_Guang`。以下保留原目录的历史挂载测试记录；它不代表新目录已重新验证。当前路径以第12.2、15.5节为准，本次仅同步项目文件，未操作服务器挂载。
 
 两个目录均已在容器中成功识别：
 
@@ -641,7 +643,7 @@ local_rank = 0,1,2,3
 项目根目录固定为：
 
 ```text
-/data/workspace/QinghaoLi/Eye_Qing_Guang
+/home/KanglongTan/QinghaoLi/Eye_Qing_Guang
 ```
 
 如果项目存在 Windows 路径或旧服务器路径，应修改为以上 Linux 路径。
@@ -716,7 +718,7 @@ podman stop qinghao_ppu_train
 podman start qinghao_ppu_train
 ```
 
-停止 shell 不会删除项目文件，因为项目和数据均存储在宿主机 `/data` 并通过 bind mount 挂载。
+停止 shell 不会删除宿主机文件。当前项目位于宿主机 `/home/KanglongTan/QinghaoLi/Eye_Qing_Guang`，数据仍位于 `/data/workspace/KanglongTan/data`；容器使用的 bind mount 应对应这些实际目录。
 
 ---
 
@@ -768,5 +770,25 @@ podman start qinghao_ppu_train
 6. 默认优先实现单卡 `cuda:0` smoke test。
 7. 单卡成功后再考虑多卡。
 8. 所有数据路径使用 `/data/workspace/KanglongTan/data`。
-9. 项目路径使用 `/data/workspace/QinghaoLi/Eye_Qing_Guang`。
+9. 项目路径使用 `/home/KanglongTan/QinghaoLi/Eye_Qing_Guang`。
 10. 在修改依赖或训练配置前，先说明修改原因和可能的 PPU 兼容风险。
+
+## 19. 四卡精度路线修复（2026-10-20）
+
+在原个人容器和四卡映射不变的前提下，新增显式FP32与BF16配置。优先采用 [README中的完整命令](README.md#ppu-precision-v2)：先以128实例/1组完成四卡FP32预检，再以256实例/2组完成FP32对照和BF16更新。不增加预算来反复尝试FP16缩放；BF16失败而FP32通过时，可采用已验证的FP32配置正式训练。FP32也失败时先定位阶段，不能跳过检查。
+
+- FP32：`configs/b0_resnet50_512_dev_ddp4_ppu_fp32_v2.yaml`，`amp=false`、`precision=fp32`。
+- BF16：`configs/b0_resnet50_512_dev_ddp4_ppu_bf16_v2.yaml`，`amp=true`、`precision=bf16`，不启用GradScaler。
+- 每卡batch16、累积2、workers4，全局有效batch128；服务器项目和数据目录沿用第12节。
+- BF16通过实际卷积/反向及ResNet50预检确认支持；不根据CUDA兼容版本推断厂商算子支持，不替换现有PyTorch或PPU SDK。
+- 预检固定工作量、先对照后目标精度，终端提供阶段日志，报告保留各阶段耗时。原FP16配置继续兼容，旧记录不覆盖。
+
+本节更新精度验证路线；服务器实际通过状态以新报告为准，本地CPU/Gloo和CUDA合成测试不代表PPU验证通过。
+
+## 20. 第17轮续训与故障取证（2026-10-20）
+
+服务器已完成17轮并在第18轮触发通信超时。原 `epoch_0017.pt` 已通过CPU加载、张量有限性和AdamW状态核验。新续训配置完整保留用户指定的每卡batch128、累积1、验证batch128、workers8和FP32，不再采用减小batch方案；新建诊断输出目录，原产物保留。
+
+入口及完整命令见 [README续训与诊断](README.md#ppu-resume-diagnostics-v3)。命令通过 `train --resume-from .../epoch_0017.pt` 恢复模型、优化器、成功更新调度和早停，从epoch18继续，不会重新训练前17轮。缺少旧随机状态，不承诺逐位复现。新实现每完整轮次保存独立训练检查点，便于下一次恢复。
+
+各rank记录取数、前向、反向和更新阶段，60秒无阶段推进自动输出调用栈；DataLoader等待上限90秒，通信上限保持180秒。rank0后台定期调用现有设备状态命令，保留同时间DeepSeek和训练进程的整卡显存证据；不操作DeepSeek服务，不修改或覆盖PPU环境依赖。续训仍需在服务器实际执行，本地合成回归不代表已经解决原阻塞的根因。

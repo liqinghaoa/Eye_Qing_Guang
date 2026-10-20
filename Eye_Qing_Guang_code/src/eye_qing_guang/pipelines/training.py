@@ -28,7 +28,13 @@ def _copy_checkpoint(source: Path, destination: Path) -> None:
         shutil.copyfileobj(reader, writer)
 
 
-def train(config: dict, root: Path, name: str | None = None) -> Path:
+def train(config: dict, root: Path, name: str | None = None, resume_from: Path | None = None) -> Path:
+    if config["experiment"].get("protocol") == "b0_dev_ddp_v1":
+        from eye_qing_guang.pipelines.b0_distributed import train_distributed
+
+        return train_distributed(config, root, name, resume_from=resume_from)
+    if resume_from is not None:
+        raise ValueError("--resume-from currently supports four-rank B0 only.")
     if config["experiment"].get("protocol") == "b0_dev_v1":
         from eye_qing_guang.pipelines.b0_development import train_development
 

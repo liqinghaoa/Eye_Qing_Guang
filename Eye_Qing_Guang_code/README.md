@@ -6,13 +6,16 @@
 
 新增的 **B0-dev ResNet50-512** 使用独立内部开发协议，服务器步骤见本文末尾“B0-dev 服务器运行”。下方原始 ResNet18 快速流程继续保留，两者的数据划分和优化预算不同。
 
+四卡扩展使用独立 `b0_dev_ddp_v1` 协议，见文末“PPU 后四卡 DDP 运行”。单卡配置继续保留，四卡配置的 batch/worker 均按每个进程解释；PPU 上的通信、目标模型 AMP 和实际加速仍须在服务器验证。
+
 ## 目录
 
 ```text
 Eye_Qing_Guang_code/
 ├── configs/
 │   ├── resnet18.yaml                 # 初始基线，兼容旧实验
-│   └── b0_resnet50_512_dev_v1.yaml    # B0 内部开发实验
+│   ├── b0_resnet50_512_dev_v1.yaml    # B0 单卡内部开发实验
+│   └── b0_resnet50_512_dev_ddp4_ppu_v1.yaml # PPU 后四卡 DDP
 ├── data/
 │   ├── raw/glaucoma_first/           # 本地原始布局；PPU服务器数据在 /data/workspace/KanglongTan/data/glaucoma_first
 │   ├── manifests/                    # 版本化的标准样本清单
@@ -57,12 +60,12 @@ Eye_Qing_Guang_code/
 
 ## 环境安装
 
-要求 Python 3.10+。当前服务器使用已配置的 Podman 个人容器 `qinghao_ppu_train`，项目位于 `/data/workspace/QinghaoLi/Eye_Qing_Guang`。环境以 [PPU服务器与个人训练环境配置说明](PPU服务器与个人训练环境配置说明.md) 为依据：保留镜像内的 Python3.12、PPU适配版PyTorch2.11.0及SDK，不迁入旧3090的Conda环境，也不通过普通PyPI/NVIDIA wheel替换torch、torchvision或CUDA运行库。如需登记或重新安装源码，在已有依赖环境中执行：
+要求 Python 3.10+。当前服务器使用已配置的 Podman 个人容器 `qinghao_ppu_train`，项目位于 `/home/KanglongTan/QinghaoLi/Eye_Qing_Guang`。环境以 [PPU服务器与个人训练环境配置说明](PPU服务器与个人训练环境配置说明.md) 为依据：保留镜像内的 Python3.12、PPU适配版PyTorch2.11.0及SDK，不迁入旧3090的Conda环境，也不通过普通PyPI/NVIDIA wheel替换torch、torchvision或CUDA运行库。如需登记或重新安装源码，在已有依赖环境中执行：
 
 ```bash
 # 在宿主机进入已有个人容器；若已在容器内，跳过这一行。
 podman exec -it qinghao_ppu_train bash
-cd /data/workspace/QinghaoLi/Eye_Qing_Guang
+cd /home/KanglongTan/QinghaoLi/Eye_Qing_Guang
 python -m pip install --no-index --no-deps --no-build-isolation -e .
 ```
 
@@ -91,9 +94,9 @@ python -m eye_qing_guang.cli train --help
 
 ## 使用流程
 
-项目根目录由安装位置自动识别；服务器宿主机和容器中均为 `/data/workspace/QinghaoLi/Eye_Qing_Guang`，无需将Linux路径写死到Python源码。该目录应直接包含 `configs/`、`scripts/`、`src/` 和 `pyproject.toml`。配置和命令中的相对路径均相对于项目根目录解析，可用 `--project-root` 显式指定；绝对路径按原值使用，`--project-root` 不会重定向绝对的 `data.raw_root`。
+项目根目录由安装位置自动识别；服务器宿主机和容器中均为 `/home/KanglongTan/QinghaoLi/Eye_Qing_Guang`，无需将Linux路径写死到Python源码。该目录应直接包含 `configs/`、`scripts/`、`src/` 和 `pyproject.toml`。配置和命令中的相对路径均相对于项目根目录解析，可用 `--project-root` 显式指定；绝对路径按原值使用，`--project-root` 不会重定向绝对的 `data.raw_root`。
 
-原始数据保留在共享的数据挂载目录。生成的清单仍放在项目内的 `data/manifests/`：B0使用 `/data/workspace/QinghaoLi/Eye_Qing_Guang/data/manifests/glaucoma_b0_dev_ppu_v1`，ResNet18使用同级的 `glaucoma_first_ppu_v1`，独立测试清单示例为 `glaucoma_official_test_ppu_v1`。实验输出根为 `/data/workspace/QinghaoLi/Eye_Qing_Guang/experiments`，无需额外创建统一outputs目录。外部原始图像写入清单时使用实际绝对路径；已有3090清单及检查点不自动改写，后续获准生成时使用新的PPU清单版本，核对来源和相同的内部样本划分。每条命令均支持 `--help`；以下命令供相应实验阶段使用，不会自动执行。
+原始数据保留在共享的数据挂载目录。生成的清单仍放在项目内的 `data/manifests/`：B0使用 `/home/KanglongTan/QinghaoLi/Eye_Qing_Guang/data/manifests/glaucoma_b0_dev_ppu_v1`，ResNet18使用同级的 `glaucoma_first_ppu_v1`，独立测试清单示例为 `glaucoma_official_test_ppu_v1`。实验输出根为 `/home/KanglongTan/QinghaoLi/Eye_Qing_Guang/experiments`，无需额外创建统一outputs目录。外部原始图像写入清单时使用实际绝对路径；已有3090清单及检查点不自动改写，后续获准生成时使用新的PPU清单版本，核对来源和相同的内部样本划分。每条命令均支持 `--help`；以下命令供相应实验阶段使用，不会自动执行。
 
 ### 1. 审计数据并生成清单
 
@@ -180,12 +183,12 @@ python -m unittest discover -s tests -v
 
 配置 `configs/b0_resnet50_512_dev_v1.yaml` 固定：随机初始化 torchvision ResNet50，全网络训练，2048→1 单头，dropout=0，图像单输入；普通 BCE、pos_weight=1、自然比例随机遍历、不丢尾批。训练 physical batch=16、累积=2，评估 batch=16；AdamW 的峰值 lr=1e-3、weight_decay=1e-4、betas=(0.9,0.999)、eps=1e-8。最多80轮，最短30轮允许早停，patience=15，min_delta=1e-4。配置中的关键字段会被校验，拼错或未实现的 B0 字段会报错。
 
-当前配置适配个人容器 `qinghao_ppu_train`：源码为 `/data/workspace/QinghaoLi/Eye_Qing_Guang`，原始图像与CSV为 `/data/workspace/KanglongTan/data/glaucoma_first`。容器已固定 `CUDA_VISIBLE_DEVICES=4,5,6,7`，内部逻辑 `cuda:0/1/2/3` 分别对应物理PPU4/5/6/7。默认 `training.device: cuda:0` 使用物理PPU4；不要在进入容器后重新覆盖 `CUDA_VISIBLE_DEVICES`，也不要填写 `cuda:4～7` 或用逗号设备列表代替当前单设备参数。本项目未接入DDP，本次不启动多卡，也不操作 `ds41` 服务。
+当前配置适配个人容器 `qinghao_ppu_train`：源码为 `/home/KanglongTan/QinghaoLi/Eye_Qing_Guang`，原始图像与CSV为 `/data/workspace/KanglongTan/data/glaucoma_first`。容器已固定 `CUDA_VISIBLE_DEVICES=4,5,6,7`，内部逻辑 `cuda:0/1/2/3` 分别对应物理PPU4/5/6/7。默认 `training.device: cuda:0` 使用物理PPU4；不要在进入容器后重新覆盖 `CUDA_VISIBLE_DEVICES`，也不要填写 `cuda:4～7` 或用逗号设备列表代替当前单设备参数。本项目未接入DDP，本次不启动多卡，也不操作 `ds41` 服务。
 
 以下仅列出后续相应阶段的命令示例，本次不执行：
 
 ```bash
-cd /data/workspace/QinghaoLi/Eye_Qing_Guang
+cd /home/KanglongTan/QinghaoLi/Eye_Qing_Guang
 python -m pip install --no-index --no-deps --no-build-isolation -e .
 python -m unittest discover -s tests -v
 python scripts/preprocess/audit_dataset.py --config configs/b0_resnet50_512_dev_v1.yaml --decode-images --output data/manifests/b0_train_audit_ppu_v1.json
@@ -262,3 +265,201 @@ CUDA训练使用FP16 autocast，BCE在autocast外使用FP32 logits计算。累�
 本次不实现/运行多种子复验或B0-fit训练入口。仅提供文档所述fit长度取整函数及边界测试，B0-fit仍需独立阶段实现，不能将 `epochs` 改短并同时压缩80轮调度。正式单图计时认证、训练收敛、真实FOV安全性和服务器资源适配均未由本次合成验证证明。
 
 独立复算B0检查点时，`evaluate_checkpoint.py` 默认读取保存的内部开发清单并标记 `evaluation_source=internal_development`。若后续获准评估外部清单，必须同时显式指定 `--manifest` 和 `--evaluation-source`，避免把官方确认成绩与内部开发成绩混名；此处不执行该后续评估。旧检查点仍沿用原配置的评估来源。
+
+## PPU 后四卡 DDP 运行
+
+**2026-10-20 精度修复：服务器后续操作优先使用文末“PPU 四卡 FP32/BF16 精度路线”。本节的旧 FP16 配置和预算说明保留用于兼容、解释已有记录；更新后的混合精度预检已改为先执行 FP32 对照、再执行一次目标精度更新。**
+
+本节对应研究方案第十三章。复用 `qinghao_ppu_train` 的 PPU 适配环境，保留其 `CUDA_VISIBLE_DEVICES=4,5,6,7` 和代理设置，不覆盖 PyTorch/torchvision/SDK。容器内逻辑 `cuda:0..3` 对应物理 PPU 4..7，每张卡一个训练进程；DeepSeek 服务继续运行，显存和计算资源属于共享资源。
+
+进入容器、项目目录，并确保导入的是本次更新的源码：
+
+```bash
+# 宿主机执行
+podman exec -it qinghao_ppu_train bash
+
+# 以下在容器内执行；不要重新设置 CUDA_VISIBLE_DEVICES
+cd /home/KanglongTan/QinghaoLi/Eye_Qing_Guang
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
+python -c "import eye_qing_guang; print(eye_qing_guang.__file__)"
+```
+
+独立配置为 `configs/b0_resnet50_512_dev_ddp4_ppu_v1.yaml`：每卡 batch=16、累积=2，全局有效 batch=128；每卡 workers=4，总计16；验证每卡batch=16、FP32。`training.device: cuda` 的索引由 `LOCAL_RANK` 绑定，不能改成固定 `cuda:0`。普通 BatchNorm 仍使用每卡微批次统计，与此前单卡 batch=64 有差异。峰值学习率保持1e-3，不自动乘四。默认每10个全局更新组输出一次终端进度，`updates.csv` 仍逐组记录。
+
+第一步只检查四卡通信，不打开真实图像或创建训练目录：
+
+```bash
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang ddp-check \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_v1.yaml
+```
+
+仅使用现有 PPU 的 `nccl` 兼容后端；后端不可用、设备限制不符或进程数不是4时直接失败，不回退CPU或单卡。此命令覆盖本流程需要的设备张量通信类型，但不替代目标模型/精度预检。若环境要求另一厂商后端，先核实后修订支持，不安装普通NVIDIA包覆盖现有栈。
+
+开发清单沿用 `data/manifests/glaucoma_b0_dev_ppu_v1/`。已存在且来源核对通过时直接使用，不能覆盖重建。若尚未生成，仅单进程执行：
+
+```bash
+python -m eye_qing_guang development \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_v1.yaml
+```
+
+训练清单数量必须能被4整除，否则停止，不通过填充重复样本或丢弃尾部维持运行。验证采用无重复分片，汇总完整开发集后计算 AUROC/AP；不平均四张卡的局部指标。只有rank 0写公共输出，权重保存时移除DDP包装，仍支持原单卡评估/测试预测入口及显式清单约束。
+
+四卡数值预检默认仍限制为全局64个样本实例、最多4个全局组，FP32反向参照也计入。当前目标配置单个组已需128个实例，因此直接使用默认预算会在训练前拒绝。若使用独立每卡batch=4、累积=2的小配置，AMP32+FP32参照32可以落在原预算内，但不能证明目标batch=16已通过。
+
+目标配置的一个AMP组及一个FP32参照最少共256个实例。**仅在明确采用该扩展预检预算时**执行以下命令；本次实现没有执行它：
+
+```bash
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang preflight \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_v1.yaml \
+  --name b0_resnet50_512_preflight_ddp4_ppu_s42_v1 \
+  --max-sample-instances 256 --max-groups 2
+```
+
+此预算在首个AMP组成功时足够；若发生溢出跳步而缺少FP32参照预算，则报告 `inconclusive` 并以非零退出码结束，不自动扩大预算、降scale重喂同组、切换精度或用新目录反复追加尝试。AMP与FP32使用同一增强张量、相同初始化和微批次划分，并复用既有公开数值容差；目标配置显存、参数更新一致性及单进程加载也在预检范围内。预检吞吐来自缓存的增强张量，不是在线训练速度测量。
+
+完成必要预检、人工输入检查并确定正式运行后，再执行下面的正式训练命令，不能将文档中的命令示例视为已运行：
+
+```bash
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang train \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_v1.yaml
+```
+
+正式目录为 `experiments/b0_resnet50_512_dev_ddp4_ppu_s42_v1/`，拒绝覆盖已有目录。80轮调度、最短30轮及patience=15规则沿用B0；更新数按全局成功优化计数，AMP跳步不推进调度。日志中的消费/成功组样本数是四卡总量，更新数不会乘四。每轮的 `train_seconds` 为最慢rank训练时间，吞吐为全局消费数/该耗时；记录验证及汇总、检查点保存、各rank峰值显存。`epoch_XXXX.json` 的 `epoch_seconds` 截至公共轮次报告写入之前；`history.csv` 每轮追加并刷新，另含 `report_write_seconds` 和包含报告写入及随后同步的 `complete_epoch_seconds`，取最慢rank的轮次耗时，不含该行计时记录自身的写入。中途暂停或失败时，已完成轮次的计时仍保留在该CSV中，不等待正常训练结束。四卡配置的安全worker启动方式也适用于不分片的单进程权重回测加载器，默认使用spawn。
+
+长时间的最终图像代理/错误分析在释放训练进程组后由rank 0执行，避免其他rank因等待CPU分析超过通信超时。失败时保留已有输出，并尽力写 `reports/failure_rank_XXXX.json`；强制杀进程可能来不及写最终清单，应结合 `run_started.json`、逐组CSV、启动器错误及rank失败记录判断完成程度。旧版未提供断点恢复；完整epoch检查点续训现已通过文末的 `--resume-from` 支持，始终使用新目录。
+
+服务器通信、ResNet50/PPU AMP和同全局batch下的单卡/四卡速度比较，均不能由本地CPU/Gloo合成测试代替。四卡提速幅度以共享服务器上的实测为准，不预先承诺四倍加速。
+
+### 每卡 batch=32、累积=1 的独立候选
+
+新增 `configs/b0_resnet50_512_dev_ddp4_ppu_b32a1_w4_v1.yaml`，仅相对四卡起点修改实验名称、每卡batch（16→32）和累积次数（2→1）；workers仍为每卡4，FP32验证batch仍为每卡16。全局有效batch保持128，普通BatchNorm的微批次统计范围会变化，因此独立报告结果。该候选尚未在PPU运行，不承诺提速。
+
+设备状态中的低利用率和少量显存占用需要结合日志是否持续推进判断。先确认当前运行属于预检还是正式训练、有无新更新或阶段变化；若进程卡在加载/通信，先定位原因。不要在同四张卡的原任务仍运行时直接叠加新训练。CPU总占用偏低也不排除少量加载进程或存储等待成为瓶颈。
+
+当前运行正常推进且已结束，或用户明确暂停并保留已有产物后，再将候选同步至服务器。目标配置的一次AMP组加FP32反向参照仍至少需要256个全局样本实例、2个全局组；预检使用独立名称 `b0_resnet50_512_preflight_ddp4_ppu_b32a1_w4_s42_v1`。原预检结果和输出目录不覆盖。预检通过不代表在线吞吐已改善，后续按相同数据、精度、共享服务负载及全局batch比较 `history.csv` 中训练吞吐和完整轮次耗时。
+
+<a id="ppu-precision-v2"></a>
+
+## PPU 四卡 FP32/BF16 精度路线（2026-10-20）
+
+原预检出现一次 FP16 梯度溢出后成功更新，但用完256实例/2组，未执行FP32梯度对照。本次改为显式精度和固定工作量，不依赖增加预算或重复尝试。旧配置缺少 `training.precision` 时仍按 `amp=true → fp16`、`amp=false → fp32` 解释；新字段目前仅用于四卡B0配置，旧单卡协议保持不变。
+
+| 新配置 | 精度字段 | GradScaler | 每卡batch / 累积 / workers | 预检实际工作量 |
+| --- | --- | --- | --- | --- |
+| `configs/b0_resnet50_512_dev_ddp4_ppu_fp32_v2.yaml` | `precision: fp32`、`amp: false` | 禁用 | 16 / 2 / 4 | 128实例、1组FP32更新 |
+| `configs/b0_resnet50_512_dev_ddp4_ppu_bf16_v2.yaml` | `precision: bf16`、`amp: true` | 禁用，BF16 autocast仍启用 | 16 / 2 / 4 | 128实例FP32对照 + 128实例BF16更新，共256实例/2组 |
+
+两配置保持同一内部划分、ResNet50-512、全局有效batch128、普通每卡BatchNorm、学习率和成功更新调度。精度变体使用独立正式目录，不与原FP16结果混名。BF16先执行小型卷积/反向算子检查，再由实际ResNet50预检验证；不单凭设备能力标志判断支持，不支持时不会静默切换精度。
+
+混合精度预检先保存初始化状态，对一组缓存的增强张量执行FP32前反向，然后恢复相同权重/BatchNorm状态，在相同物理微批次上执行一次目标精度更新。损失/梯度容差沿用原公开值，不为通过检查而放宽。FP32基线不做与自身的混合精度对照，报告 `precision_comparison.status=not_applicable`；参数更新、一致性和权重加载均通过后，总体仍为 `status=completed`。混合精度还必须 `precision_comparison.status=passed`。
+
+预算不足会在初始化设备和模型前拒绝；即使提供更大上限，也只执行上述固定工作量。FP16更新溢出时保留已完成的FP32对照，报告 `fp16_gradient_overflow_after_completed_fp32_reference`、退出码2，不重试、不增加预算。BF16/FP32非有限梯度、算子不支持、精度超差或权重加载异常均直接失败并保留阶段记录；正式训练不会自动开始。
+
+预检终端逐阶段输出 started/done 和耗时，最终 `reports/preflight.json` 包含 `training_precision`、`stage_seconds`、FP32对照及目标训练峰值显存、更新记录和检查点加载结果。用于检查权重的小型确定性FP32推理采用workers=0，避免每次预测重建spawn池；训练数据加载仍使用配置中的每卡4个workers。缓存张量吞吐不能代表在线训练速度。
+
+将更新后的 `src/` 和 `configs/` 同步到已挂载的项目，无需重建容器或重装训练依赖。以下命令在原个人容器内执行，保留 `CUDA_VISIBLE_DEVICES=4,5,6,7`：
+
+```bash
+cd /home/KanglongTan/QinghaoLi/Eye_Qing_Guang
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONUNBUFFERED=1
+
+# 1. 先确认四卡FP32更新、参数一致性与检查点加载。
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang preflight \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_fp32_v2.yaml \
+  --name b0_resnet50_512_preflight_ddp4_ppu_fp32_s42_v2 \
+  --max-sample-instances 128 --max-groups 1
+```
+
+仅在上一条退出码为0、报告总体 `status=completed` 时，执行BF16检查：
+
+```bash
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang preflight \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_bf16_v2.yaml \
+  --name b0_resnet50_512_preflight_ddp4_ppu_bf16_s42_v2 \
+  --max-sample-instances 256 --max-groups 2
+```
+
+BF16预检通过后，正式训练命令如下。若BF16不支持或精度对照失败、而FP32预检已经通过，可直接采用下面列出的FP32路线，不继续调整预算。两条正式训练命令二选一，不同时运行：
+
+```bash
+# BF16路线：仅在对应BF16预检通过后使用。
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang train \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_bf16_v2.yaml
+
+# FP32路线：对应FP32预检通过后可使用。
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang train \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_fp32_v2.yaml
+```
+
+FP32预检本身异常时，不继续启动训练，应根据失败阶段处理。目录已存在时命令会拒绝覆盖，先阅读该次报告，不通过改名反复运行。以上为服务器操作说明，不表示本次已执行PPU预检或正式训练；本地合成测试不能保证PPU自定义算子兼容或长期收敛。
+
+<a id="ppu-resume-diagnostics-v3"></a>
+
+## 四卡从第17轮续训及卡点诊断（2026-10-20）
+
+使用 `configs/b0_resnet50_512_dev_ddp4_ppu_fp32_resume17_diag_v3.yaml`。按用户最终要求，它完整保留已运行实验快照中的训练、数据和分布式参数：每卡batch128、累积1、验证batch128、每卡workers8、FP32、全局有效batch512、80轮调度及原学习率。只增加诊断选项并采用新的实验名称；原实验、权重和日志不覆盖。
+
+续训入口只接受完整epoch的四卡format-2训练检查点，恢复模型/BN、AdamW一二阶矩与step、scaler、成功更新调度和早停状态；核对数据身份、每轮组数及累计样本数。v3配置保持原全局batch；下文v4支持显式改变batch并迁移剩余调度。不接受只有权重的推理检查点，不自动扩展轮数或重置warmup。旧检查点中的 `resume_supported=false` 表示旧入口没有实现续训，不代表训练状态不可用；新入口会核验实际内容，禁止手工修改标志绕过核验。
+
+`epoch_0017.pt` 应恢复1377次成功更新、698972个全局消费样本，从epoch18重新开始；第一次新更新索引1378，学习率约 `0.0009380906869793779`。旧epoch18未保存的64次更新会重做。旧检查点没有各rank随机数和DataLoader状态，因此明确记录 `exact_replay=false`，不承诺逐位复现原轨迹。
+
+先将本次更新的 `src/` 和 `configs/` 同步到服务器原项目，保留原检查点文件；无需重建容器或重装PyTorch。以下在个人容器中执行，不覆盖 `CUDA_VISIBLE_DEVICES`：
+
+```bash
+cd /home/KanglongTan/QinghaoLi/Eye_Qing_Guang
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONUNBUFFERED=1
+
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang train \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_fp32_resume17_diag_v3.yaml \
+  --resume-from experiments/b0_resnet50_512_dev_ddp4_ppu_fp32_s42_v2/checkpoints/epoch_0017.pt
+```
+
+新目录固定为 `experiments/b0_resnet50_512_dev_ddp4_ppu_fp32_resume17_diag_s42_v3/`。启动会核验并恢复训练状态，再对继承的best权重做一次内部开发集预测，确保没有新best时仍可生成正确的最终产物；这是验证前向，不是重新训练前17轮。随后终端应出现 `Resumed epoch 17; next epoch=18; successful_updates=1377` 和 `Epoch 18` 进度。
+
+新目录的history/updates只记录新执行的epoch18及以后，累计更新/样本计数承接旧检查点；run_started/run_manifest记录来源与新增完成轮数。AUROC选best与patience规则不变。为使后续完整轮次均可恢复，四卡训练现在每轮保存独立 `checkpoints/epoch_XXXX.pt`，即使没有改善；`best.pt`仍按AUROC选择，不等同于最新epoch。继承的best文件会复制到新目录，原始文件内容保留。每份训练权重约270MiB，需为后续轮次保留磁盘空间。
+
+诊断产物如下：
+
+| 文件 | 内容 |
+| --- | --- |
+| `reports/diagnostics_rank_0000.jsonl` 至 `0003` | 各rank的epoch、累计组号、微批次、取数/传输/前向/反向/更新阶段；取数前预期ID、取数后实际ID；关键点的本进程allocator显存计数 |
+| `reports/stacks_rank_0000.log` 至 `0003` | 任一阶段连续60秒未推进时自动输出Python线程调用栈；发生Python异常时追加异常栈。输出栈本身不会终止训练 |
+| `reports/device_snapshots.jsonl` | rank0后台每10秒执行一次现有 `nvidia-smi` 或 `ppu-smi`，保存整卡及DeepSeek等进程原始占用；单次命令最多5秒，失败记录错误而不阻塞训练 |
+| `reports/failure_rank_XXXX.json` | 可捕获的异常与该rank进度；强制abort可能来不及写此文件 |
+
+启用诊断时，多进程DataLoader等待上限为90秒，小于180秒通信超时，尽量先暴露实际取数失败；workers0时不设置DataLoader超时。诊断不主动同步每个GPU算子，不静默改变训练算法；Python调用栈能指出停留的调用，但不能保证展开厂商C++内核内部。首次算子初始化等长操作也可能触发栈输出，应结合阶段日志判断。
+
+若再次出错，保留整份新目录及完整终端日志。先比较各rank最后阶段和堆栈，再查看同时间的整卡显存：可区分DataLoader等待、设备操作/同步等待与外部显存变化，不能仅凭NCCL报错认定DeepSeek导致OOM。此实现不替代PPU实机长期稳定性验证，也不会自动重启失败任务。
+
+## 第32轮后改为每卡104续训（v4）
+
+使用 `configs/b0_resnet50_512_dev_ddp4_ppu_fp32_resume32_b104_v4.yaml`：每卡训练/验证batch均为104、累积1、workers8、四卡FP32，其余训练参数与v3相同。训练集每卡10279张，每轮99个更新组，全局完整组batch416；每卡最后一组87张，四卡共348张，仍按实际组样本数归一化。原配置和产物保留，新目录固定为 `experiments/b0_resnet50_512_dev_ddp4_ppu_fp32_resume32_b104_s42_v4/`。
+
+变batch续训保持模型/BN、AdamW moments/step、早停、累计成功更新/跳过更新及样本计数。学习率不按batch比例缩放、不重置warmup：保留旧计划的下一次成功更新学习率，将旧计划尚未执行的曲线映射到新剩余成功更新预算。第32轮检查点若已成功更新2592次，则从第33轮开始计划48×99=4752次新更新，累计调度终点7344；历史2592次更新不改写成32×99。最后一个计划更新达到原 `min_lr`；跳过更新不推进调度，因此后续若有跳过，在第80轮结束时不保证已达到最低学习率。提前停止仍按原规则执行。
+
+检查点保存迁移前曲线和更新计数起点，支持再次按相同或不同batch续训；再次改变每轮组数时重新映射尚未执行的曲线。原方案尾部和新尾部都需至少两个计划更新，否则拒绝变组数迁移。新运行的 `run_started.json` / `run_manifest.json` 中 `resume.batch_transition` 记录源/目标全局batch、每轮组数、调度终点与下一步学习率。原始RNG/DataLoader状态缺失，且batch/普通BatchNorm统计发生变化，此续训属于改变训练配方后的延续，不是原128配置的等价重放。
+
+同步更新的 `src/` 和新配置后，在原容器中执行；源权重必须是服务器上已保存的完整第32轮训练检查点：
+
+```bash
+cd /home/KanglongTan/QinghaoLi/Eye_Qing_Guang
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONUNBUFFERED=1
+
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang train \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_fp32_resume32_b104_v4.yaml \
+  --resume-from experiments/b0_resnet50_512_dev_ddp4_ppu_fp32_resume17_diag_s42_v3/checkpoints/epoch_0032.pt
+```
+
+启动应显示 `Resumed epoch 32; next epoch=33; successful_updates=2592` 和 `Resume batch/schedule` 信息。每轮继续保存完整检查点与诊断记录。已有目标目录会拒绝覆盖。减小batch用于尝试降低资源压力，不保证消除共享PPU设备或厂商兼容栈中的执行/通信停顿。

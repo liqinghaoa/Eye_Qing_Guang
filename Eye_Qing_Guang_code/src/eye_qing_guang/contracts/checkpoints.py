@@ -16,7 +16,7 @@ def save_checkpoint(path: Path, model, optimizer, epoch, config, age_stats, pos_
         "config": config,
         "age_stats": age_stats,
         "pos_weight": float(pos_weight),
-        "model_state": model.state_dict(),
+        "model_state": (model.module if isinstance(model, torch.nn.parallel.DistributedDataParallel) else model).state_dict(),
         "optimizer_state": optimizer.state_dict(),
         "metrics": metrics,
         "training_state": training_state,

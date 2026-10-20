@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from eye_qing_guang.contracts.checkpoints import load_checkpoint
+from eye_qing_guang.contracts.config import is_b0
 from eye_qing_guang.contracts.dataset import load_manifest
 from eye_qing_guang.datasets.loaders import make_loader
 from eye_qing_guang.evaluators.binary import predict_batches
@@ -24,7 +25,7 @@ def evaluate_checkpoint(checkpoint: Path, root: Path, output_dir: Path,
     model, payload = load_checkpoint(checkpoint, device)
     config = payload["config"]
     path = manifest or resolve_path(config["data"]["manifest_dir"], root) / f"{split}.csv"
-    b0 = config["experiment"].get("protocol") == "b0_dev_v1"
+    b0 = is_b0(config)
     if b0:
         default_path = resolve_path(config["data"]["manifest_dir"], root) / f"{split}.csv"
         if path.resolve() == default_path.resolve():

@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from eye_qing_guang.contracts.checkpoints import load_checkpoint
-from eye_qing_guang.contracts.config import submission_options
+from eye_qing_guang.contracts.config import is_b0, submission_options
 from eye_qing_guang.contracts.dataset import load_manifest
 from eye_qing_guang.datasets.loaders import make_loader
 from eye_qing_guang.evaluators.binary import predict_batches
@@ -21,7 +21,7 @@ def predict_test(checkpoint: Path, root: Path, output_dir: Path,
     device = choose_device(device_name)
     model, payload = load_checkpoint(checkpoint, device)
     config = payload["config"]
-    if config["experiment"].get("protocol") == "b0_dev_v1" and manifest is None:
+    if is_b0(config) and manifest is None:
         raise ValueError("B0 prediction requires --manifest from the separate test-manifest command; "
                          "internal development manifests do not contain test data.")
     path = manifest or resolve_path(config["data"]["manifest_dir"], root) / "test.csv"

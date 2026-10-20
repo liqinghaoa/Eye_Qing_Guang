@@ -14,7 +14,7 @@
               "type": "markdown",
               "state": {
                 "file": "03_Method_and_Experiment/B0_ResNet50_512_基线实验实现方案_v1.md",
-                "mode": "preview",
+                "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
@@ -191,9 +191,13 @@
   "active": "ba8a7f47081067cc",
   "lastOpenFiles": [
     "02_Research_Ideas/青光眼二分类竞赛研究思路与实验路线_v1.md",
-    "03_Method_and_Experiment/B0_ResNet50_512_基线实验实现方案_v1.md",
-    "01_Background_and_Literature/青光眼二分类与数据挑战研究综述.md",
+    "01_Background_and_Literature/大数据挑战赛 - 提交作品.md",
     "01_Background_and_Literature/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
+    "01_Background_and_Literature/【大数据挑战赛·常见问题参考】2026年第八届全国高校计算机能力挑战赛.xlsx",
+    "03_Method_and_Experiment/B0_ResNet50_512_基线实验实现方案_v1.md",
+    "raw/大数据挑战赛 - 提交作品.md",
+    "raw",
+    "01_Background_and_Literature/青光眼二分类与数据挑战研究综述.md",
     "01_Background_and_Literature/key_papers/2026 Improving Generalization of Deep Learning for GlaucomaClassification Under Real-World Domain Shift viaUnsupervised Domain Adaptation.pdf",
     "01_Background_and_Literature/key_papers/2025_Yang_Fundus_Image_Quality_Assessment_Enhancement_Review_arXiv.pdf",
     "01_Background_and_Literature/key_papers/2022_Lopez_FundusQ_Net_arXiv.pdf",
@@ -202,8 +206,6 @@
     "01_Background_and_Literature/key_papers/2021_Menon_Long_Tail_Logit_Adjustment_arXiv.pdf",
     "01_Background_and_Literature/key_papers/2023_External_Validation_GON_Multicentre_Eye.pdf",
     "01_Background_and_Literature/key_papers/2021_Yuan_Deep_AUC_Maximization_arXiv.pdf",
-    "01_Background_and_Literature/key_papers/2020_Hendrycks_AugMix_arXiv.pdf",
-    "01_Background_and_Literature/key_papers/2021_Zhou_MixStyle_arXiv.pdf",
     "raw/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md"
   ]
 }

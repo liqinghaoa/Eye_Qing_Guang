@@ -2,6 +2,14 @@
 
 import math
 
+from eye_qing_guang.contracts.precision import training_precision
+
+B0_PROTOCOLS = {"b0_dev_v1", "b0_dev_ddp_v1"}
+
+
+def is_b0(config):
+    return config["experiment"].get("protocol") in B0_PROTOCOLS
+
 
 def submission_options(config):
     """Resolve submission defaults without requiring a section in old checkpoints."""
@@ -76,7 +84,7 @@ def validate_config(config: dict) -> None:
     submission_options(config)
     protocol = config["experiment"].get("protocol")
     if protocol is not None:
-        if protocol != "b0_dev_v1":
+        if protocol not in B0_PROTOCOLS:
             raise ValueError(f"Unsupported experiment protocol: {protocol}")
         validate_b0(config)
     elif data.get("preprocessing", {}).get("version", "legacy_resize_v1") != "legacy_resize_v1":
@@ -92,12 +100,39 @@ def validate_b0(config):
         "training": "epochs batch_size eval_batch_size accumulation_steps learning_rate weight_decay betas eps loss auto_pos_weight focal_gamma device amp grad_clip max_consecutive_skips scheduler schedule_total_epochs warmup_epochs warmup_start_lr min_lr monitor min_epochs min_delta patience",
         "evaluation": "threshold subgroup_fit_samples",
     }
-    if not set(allowed) <= set(config) or set(config) - set(allowed) - {"submission"}:
+    if config["experiment"]["protocol"] == "b0_dev_ddp_v1":
+        allowed["distributed"] = "enabled world_size backend timeout_seconds log_every_n_groups multiprocessing_context"
+        options = config.get("distributed", {})
+        if not isinstance(options, dict):
+            raise ValueError("distributed must be a mapping.")
+        if (options.get("enabled") is not True or type(options.get("world_size")) is not int
+                or options["world_size"] != 4 or options.get("backend") != "nccl"):
+            raise ValueError("DDP v1 requires enabled=true, world_size=4 and the verified nccl-compatible PPU backend.")
+        for key in ("timeout_seconds", "log_every_n_groups"):
+            if type(options.get(key)) is not int or options[key] < 1:
+                raise ValueError(f"distributed.{key} must be a positive integer.")
+        if options.get("multiprocessing_context") not in {"spawn", "forkserver"}:
+            raise ValueError("DDP workers require spawn or forkserver.")
+        if config["training"]["device"] != "cuda":
+            raise ValueError("DDP device must be cuda; LOCAL_RANK selects its index.")
+    optional_sections = {"submission", "diagnostics"} if "distributed" in allowed else {"submission"}
+    if not set(allowed) <= set(config) or set(config) - set(allowed) - optional_sections:
         raise ValueError("B0 requires the documented sections, with optional submission settings.")
+    if "diagnostics" in config:
+        diagnostics = config["diagnostics"]
+        fields = {"enabled", "data_timeout_seconds", "stack_timeout_seconds", "device_poll_seconds", "device_poll_timeout_seconds"}
+        if not isinstance(diagnostics, dict) or set(diagnostics) != fields or type(diagnostics["enabled"]) is not bool:
+            raise ValueError("Invalid/unknown DDP diagnostics settings.")
+        for key in fields - {"enabled"}:
+            if type(diagnostics[key]) is not int or diagnostics[key] <= 0:
+                raise ValueError(f"diagnostics.{key} must be a positive integer.")
+        if not diagnostics["stack_timeout_seconds"] < diagnostics["data_timeout_seconds"] < config["distributed"]["timeout_seconds"]:
+            raise ValueError("Require stack timeout < DataLoader timeout < process-group timeout.")
     for section, fields in allowed.items():
         if not isinstance(config[section], dict):
             raise ValueError(f"B0 section must be a mapping: {section}")
-        if set(config[section]) != set(fields.split()):
+        optional = {"precision"} if section == "training" and "distributed" in allowed else set()
+        if set(fields.split()) - set(config[section]) or set(config[section]) - set(fields.split()) - optional:
             raise ValueError(f"B0 missing/unknown fields in {section}: {set(config[section]) ^ set(fields.split())}")
     data, train, model = config["data"], config["training"], config["model"]
     if set(data["splits"]) != {"train", "valid", "test"} or any(
@@ -131,6 +166,7 @@ def validate_b0(config):
         raise ValueError("Require 2 <= warmup_epochs < schedule_total_epochs.")
     if not isinstance(train["amp"], bool) or not str(train["device"]).startswith("cuda"):
         raise ValueError("B0 requires explicit CUDA and a boolean AMP setting.")
+    training_precision(train)
     for key in ("grad_clip", "eps", "warmup_start_lr", "min_lr", "min_delta"):
         if isinstance(train[key], bool) or not math.isfinite(float(train[key])) or float(train[key]) <= 0:
             raise ValueError(f"Invalid B0 numeric field: {key}")

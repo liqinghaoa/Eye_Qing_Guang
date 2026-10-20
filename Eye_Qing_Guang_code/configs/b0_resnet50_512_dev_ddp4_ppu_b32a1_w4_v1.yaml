@@ -1,0 +1,85 @@
+# Unrun throughput candidate: compare b32/a1 against b16/a2 at the SAME global batch 128.
+# Keep workers=4/rank and eval_batch=16; confirm active progress before launching another job.
+# PPU container: qinghao_ppu_train; project: /home/KanglongTan/QinghaoLi/Eye_Qing_Guang
+# Keep CUDA_VISIBLE_DEVICES=4,5,6,7. torchrun LOCAL_RANK 0..3 binds physical PPU 4..7.
+# Candidate configuration: PPU collectives/ResNet50 AMP and speed still need server validation.
+experiment:
+  name: b0_resnet50_512_dev_ddp4_ppu_b32a1_w4_s42_v1
+  protocol: b0_dev_ddp_v1
+  seed: 42
+  output_root: experiments
+distributed:
+  enabled: true
+  world_size: 4
+  backend: nccl                    # Existing PPU-compatible backend only; ddp-check must pass first.
+  timeout_seconds: 180
+  log_every_n_groups: 10           # Rank 0 console progress; updates.csv still records every group.
+  multiprocessing_context: spawn  # Per-rank DataLoader workers; no fork after PPU initialization.
+data:
+  raw_root: /data/workspace/KanglongTan/data/glaucoma_first
+  manifest_dir: data/manifests/glaucoma_b0_dev_ppu_v1  # Reuse frozen single-card internal split.
+  image_column: Image_name
+  label_column: True_Label
+  age_column: Age
+  splits:
+    train: {csv: train.csv, images: train, labeled: true}
+    valid: {csv: valid.csv, images: valid, labeled: true}
+    test: {csv: test.csv, images: test, labeled: false}
+  image_size: 512
+  num_workers: 4                  # PER RANK: four cards use 16 workers total; later compare 8/rank.
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
+  preprocessing:
+    version: fov_letterbox_v1
+    preview_size: 512
+    threshold: 8
+    min_line_fraction: 0.01
+    margin: 0.02
+    min_area: 0.5
+    min_coverage: 0.995
+  augmentation:
+    horizontal_flip: 0.5
+    rotation_degrees: 10
+    brightness: [0.9, 1.1]
+    contrast: [0.9, 1.1]
+development:
+  split_seed: 20261018
+  associations_csv: null
+model:
+  backbone: resnet50
+  pretrained: false
+  dropout: 0.0
+  use_age: false
+training:
+  epochs: 80
+  batch_size: 32                  # Candidate PER RANK microbatch; 4 * 32 * 1 = 128 global effective batch.
+  eval_batch_size: 16             # PER RANK, FP32; benchmark memory separately.
+  accumulation_steps: 1           # Ordinary BatchNorm now uses 32/rank, differing from the b16/a2 reference.
+  learning_rate: 0.001            # Keep peak LR; do not multiply automatically by world size.
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+  eps: 0.00000001
+  loss: bce
+  auto_pos_weight: false
+  focal_gamma: 2.0
+  device: cuda                   # Index ALWAYS supplied by LOCAL_RANK, not fixed cuda:0.
+  amp: true
+  grad_clip: 5.0
+  max_consecutive_skips: 8
+  scheduler: warmup_cosine_success_v1
+  schedule_total_epochs: 80
+  warmup_epochs: 5
+  warmup_start_lr: 0.0001
+  min_lr: 0.000001
+  monitor: roc_auc
+  min_epochs: 30
+  min_delta: 0.0001
+  patience: 15
+evaluation:
+  threshold: 0.5
+  subgroup_fit_samples: 256
+submission:
+  mode: competition
+  id_column: Image_name
+  value_column: Probability
+  label_column: Pred_Label
