@@ -1,6 +1,6 @@
-# Resume epoch_0017.pt with --resume-from. Keep batch128 / accumulation1 / eval128 / workers8.
+# Fresh seed-42 training on exclusive physical PPU 4..7; do not pass --resume-from.
 experiment:
-  name: b0_resnet50_512_dev_ddp4_ppu_fp32_resume17_diag_s42_v3
+  name: b0_resnet50_512_dev_ddp4_ppu_fp32_retrain_b256_w16_s42_v6
   protocol: b0_dev_ddp_v1
   seed: 42
   output_root: experiments
@@ -8,7 +8,7 @@ distributed:
   enabled: true
   world_size: 4
   backend: nccl
-  timeout_seconds: 180
+  timeout_seconds: 900
   log_every_n_groups: 10
   multiprocessing_context: spawn
 data:
@@ -31,7 +31,7 @@ data:
       images: test
       labeled: false
   image_size: 512
-  num_workers: 8
+  num_workers: 16
   mean:
   - 0.5
   - 0.5
@@ -67,8 +67,8 @@ model:
   use_age: false
 training:
   epochs: 80
-  batch_size: 128
-  eval_batch_size: 128
+  batch_size: 256
+  eval_batch_size: 256
   accumulation_steps: 1
   learning_rate: 0.001
   weight_decay: 0.0001

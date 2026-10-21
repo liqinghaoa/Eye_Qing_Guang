@@ -1,5 +1,2 @@
-# 李庆浩
-
-# 赵志浩
-
-# 谭康龙
+Eye_Qing_Guang_code为项目代码；
+Eye_Qing_Guang_research为比赛背景文件、思路规划、实验记录等文档。

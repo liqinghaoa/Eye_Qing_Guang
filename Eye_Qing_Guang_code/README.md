@@ -463,3 +463,34 @@ torchrun --standalone --nnodes=1 --nproc_per_node=4 \
 ```
 
 启动应显示 `Resumed epoch 32; next epoch=33; successful_updates=2592` 和 `Resume batch/schedule` 信息。每轮继续保存完整检查点与诊断记录。已有目标目录会拒绝覆盖。减小batch用于尝试降低资源压力，不保证消除共享PPU设备或厂商兼容栈中的执行/通信停顿。
+
+## 独占四卡从头重训候选配置（v6）
+
+用户选择独占物理卡4～7、继续四进程DDP并从第1轮重训。使用 `configs/b0_resnet50_512_dev_ddp4_ppu_fp32_retrain_b256_w16_v6.yaml`，每卡训练/验证batch256、累积1、workers16（总计64），FP32、原始冻结划分和seed42不变，学习率峰值仍为0.001。通信超时900秒，诊断栈60秒、取数超时90秒；延长通信等待只是容错，不证明底层卡顿已修复。
+
+41116张训练图像在四卡上各10279张：每轮41组，全局完整batch1024，尾组每卡39张；从零开始的调度共3280次成功更新、前205次warmup。早停与每轮检查点规则不变，绝不加载第17/32轮或其他旧权重。该配置是新的大batch训练配方，与旧batch128训练并不等价。
+
+batch128旧运行的第32轮训练耗时约281.18秒，rank0阶段日志中取数等待约221.55秒；因此workers16作为改善供数的候选，而不是已证实的提速参数。batch256能否放入144GiB、吞吐是否提高，均需在PPU上验证。先执行一个全局完整更新的FP32预检；1024为全局训练样本实例预算，不含验证前向，预检不作为稳态吞吐或长期稳定性证据：
+
+```bash
+cd /home/KanglongTan/QinghaoLi/Eye_Qing_Guang
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONUNBUFFERED=1
+
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang preflight \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_fp32_retrain_b256_w16_v6.yaml \
+  --name b0_resnet50_512_preflight_ddp4_ppu_fp32_b256_w16_s42_v6 \
+  --max-sample-instances 1024 \
+  --max-groups 1
+```
+
+仅在预检正常完成且无数值/显存错误后，启动从头重训；不要传 `--resume-from`：
+
+```bash
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  -m eye_qing_guang train \
+  --config configs/b0_resnet50_512_dev_ddp4_ppu_fp32_retrain_b256_w16_v6.yaml
+```
+
+正式输出固定为 `experiments/b0_resnet50_512_dev_ddp4_ppu_fp32_retrain_b256_w16_s42_v6/`，预检目录与其分离，旧运行保留。首轮和后续轮次的取数等待、吞吐和显存是决定是否继续使用该候选的依据；不能把更多空闲显存或更大batch直接当作已验证的训练加速。本地只检查配置和调度，不自动启动服务器训练。
