@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "04_Experiment_Records/实验总结.md",
+                "file": "05_Results_and_Decisions/实验总结.md",
                 "mode": "source",
                 "source": false
               },
@@ -161,7 +161,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "04_Experiment_Records/实验总结.md",
+                "file": "05_Results_and_Decisions/实验总结.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -188,10 +188,10 @@
       "bases:新建数据库": false
     }
   },
-  "active": "ba8a7f47081067cc",
+  "active": "e71ade72777c9646",
   "lastOpenFiles": [
     "04_Experiment_Records/小队思路总结.md",
-    "04_Experiment_Records/实验总结.md",
+    "05_Results_and_Decisions/实验总结.md",
     "04_Experiment_Records/baseline_evaluation.md",
     "01_Background_and_Literature/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
     "01_Background_and_Literature/青光眼二分类与数据挑战研究综述.md",

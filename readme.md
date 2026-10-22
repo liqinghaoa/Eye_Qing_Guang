@@ -1,2 +1,7 @@
 Eye_Qing_Guang_code为项目代码；
 Eye_Qing_Guang_research为比赛背景文件、思路规划、实验记录等文档。
+01_Background_and_Literature为比赛背景相关为文档；
+02_Research_Ideas为实验思路；
+03_Method_and_Experiment为实验具体实现思路；
+04_Experiment_Records为实验记录；
+05_Results_and_Decisions为实验总结及讨论。
