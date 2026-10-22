@@ -20,7 +20,9 @@ def parse_age(value: str | float | None) -> float:
     if value is None or str(value).strip().lower() in {"", "nan", "na", "none"}:
         return float("nan")
     age = float(value)
-    if not math.isfinite(age) or not 0 <= age <= 120:
+    # Preserve the official CSV value.  The supplied valid split contains two
+    # finite non-negative values of 137, and age is not a model input here.
+    if not math.isfinite(age) or age < 0:
         raise ValueError(f"Invalid age: {value}")
     return age
 

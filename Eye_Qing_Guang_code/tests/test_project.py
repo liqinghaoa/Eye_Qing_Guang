@@ -24,7 +24,8 @@ from eye_qing_guang.losses.classification import build_loss
 from eye_qing_guang.metrics.binary_classification import compute_binary_metrics
 from eye_qing_guang.models.factory import build_model
 from eye_qing_guang.pipelines.inference import build_submission
-from eye_qing_guang.utils.experiment_io import load_config, read_csv, write_csv, write_yaml
+from eye_qing_guang.utils.experiment_io import read_csv, write_csv, write_yaml
+from config_fixtures import load_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

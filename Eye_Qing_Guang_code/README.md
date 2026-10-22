@@ -494,3 +494,84 @@ torchrun --standalone --nnodes=1 --nproc_per_node=4 \
 ```
 
 正式输出固定为 `experiments/b0_resnet50_512_dev_ddp4_ppu_fp32_retrain_b256_w16_s42_v6/`，预检目录与其分离，旧运行保留。首轮和后续轮次的取数等待、吞吐和显存是决定是否继续使用该候选的依据；不能把更多空闲显存或更大batch直接当作已验证的训练加速。本地只检查配置和调度，不自动启动服务器训练。
+
+## timm V2-S 官方 train/valid 实验（2026-10-22）
+
+入口为 `scripts/run/run_timm_v2s_experiment.py`，配置为
+`configs/timm_v2s_in21k_ft_in1k_512_pw5_official.yaml`，协议独立为
+`timm_official_trainvalid_v1`。它不调用 B0 开发划分、B0 编排或 B0 配置校验器。
+官方 train/valid/test 数量分别固定为 51396/5849/5855；无填充、无丢样本，原始 ID/标签/顺序须逐项匹配。
+清单不存在时创建，存在时只读校验来源后复用。预检只解码有限 train/valid 图像，不预测真实 test。
+
+实现包含 `tf_efficientnetv2_s.in21k_ft_in1k`、1280 维编码器、单 logit 分类头和全参数微调。
+RGB/FOV/BILINEAR/letterbox 输入为 512，mean/std 都是 0.5；训练增强沿用方案的翻转、旋转、亮度与对比度。
+固定正类权重 5 的 FP32 BCE；训练 BF16 autocast，无 GradScaler，验证与提交使用 FP32。
+只按完整官方 valid 的连续概率 AUROC 严格改善更新 best；并列保留较早轮。
+AP、梯形 PR-AUC、硬标签 AUROC、高特异度工作点及混淆指标分开报告。
+验证先统一到 rank0 模型/BN 状态，使用无补齐分片，再恢复各卡训练用本地 BN 缓冲区。
+
+每轮只原子替换当前新 run 自己的 `checkpoints/best.pt` 与 `last.pt`。
+它们是 `format_version=3 / checkpoint_kind=inference_weight`，没有优化器或续训状态；入口拒绝 `--resume-from`。
+完整流程已编排为训练、best 重载验证及逐图比较、test 推理、提交序列化读回检查。
+只有四阶段均成功才记录总 completed；失败保留当前产物，不自动重训或补跑。
+正式提交位于 `experiments/<experiment.name>/submission/submission.csv`。
+
+### B0 基础设施与本实验训练配方
+
+本版明确采用已在服务器验证的 B0 四卡训练基础设施：外部 torchrun、四个 local rank、
+CUDA_VISIBLE_DEVICES=4,5,6,7、NCCL 兼容后端、DistributedDataParallel、spawn 数据加载器，
+以及训练器的 no_sync 梯度累积和 successful-update warmup/cosine 调度。
+`utils/timm_source.py` 是薄封装，直接调用 `utils/distributed.py` 中的现有初始化和 DDP 包装；
+它不再寻找外部 gloo_staged 实现，也不声称复现其他实验的 staging 语义。
+
+新模型和实验协议保持独立：timm EfficientNetV2-S、官方 train/valid/test、512 预处理、
+pw5 BCE、BF16、每卡 batch 8/累积4、native local BN、全量官方 valid AUROC 选模，
+以及只保留 best/last。B0 学习率/优化器工程参数在本配置里被显式选作本次配方：
+AdamW、betas=(0.9,0.999)、eps=1e-8、全参数统一参数组、梯度裁剪5.0、
+warmup起点1e-4、100轮成功更新调度、早停30轮/0.0001/15轮。
+它们是本实现的明确选择，不再标注为缺失源引擎中核实出来的值。
+
+此次改变是训练实现路线的决策更新：本实验使用 NCCL 原生 DDP，不继承 gloo_staged。
+两者不是可以仅按名称互换的实现；本次以服务器已跑通的 B0 训练栈为可复用依据。
+仍须通过目标设备的有限预检验证 timm 预训练权重载入、PPU算子、BF16和目标 batch；
+本地 CPU 合成分布式测试不等价于这些目标设备验收。
+
+### 环境、预检与验收边界
+
+新增可选依赖 `timm-experiment = timm==1.0.22`，版本取自本机已有包并已检查实际模型结构。
+未安装或更换任何服务器 torch/torchvision/PPU SDK；PPU 兼容性需要在目标环境单独确认。
+初始化仅接受 `model.pretrained_file` 指定的已准备文件，或现有 HF 缓存中的同名权重；代码不自动下载。
+重载时 pretrained=False，严格读取检查点自己的配置和权重，不依赖原预训练文件继续存在。
+
+准备本地预训练权重、核对服务器路径并完成有限预检后，四进程入口为：
+
+```bash
+torchrun --standalone --nnodes=1 --nproc_per_node=4 \
+  scripts/run/run_timm_v2s_experiment.py \
+  --project-root /实际代码项目绝对路径 \
+  --config configs/timm_v2s_in21k_ft_in1k_512_pw5_official.yaml \
+  --preflight-only
+```
+
+默认独立预检目录为 `experiments/_preflight/<experiment.name>_pf_v1/`；已有目录拒绝覆盖，
+用 `--preflight-version pf_v2` 显式选择下个版本。所有相对路径锚定 project-root。
+默认预算64，有限预检实际计划56个全局样本实例：16张训练增强缓存各做一次FP32参考/BF16更新，
+以及8张正负均衡valid子集在更新后、best回载后、last回载后各评估一次。
+梯度比较容差显式写入 preflight 配置；任一超差或非有限值停止，不重试或扩大预算。
+默认只检查较小微批次，报告 target_batch_memory=not_verified，因此不会继续创建正式 run。
+本配方的目标组需128张，含FP32参考和三次8张valid共需280个实例；更大真实预检须另行授权，
+获准后才通过显式 `--max-sample-instances 280` 与新预检版本执行。
+正式入口省略 `--preflight-only`，复用同配置、同设备环境的合格目标组记录后重新初始化正式模型与随机状态。
+
+预检报告的 `peak_memory_local_rank.allocated_bytes/reserved_bytes` 记录该 worker 的峰值显存，
+`max_reserved_bytes` 为各 rank 预留峰值的合计。它只代表这一次预检的实际物理微批次，
+不能直接换算成更大的 batch；若计划加大 batch，先在独立预检版本上重测。
+正式训练期间 rank0 每 `distributed.log_every_n_groups` 个累积组打印一次本地已消费样本、
+损失、学习率与吞吐，便于区分取数等待和算力瓶颈。
+
+相关离线合成测试为 `tests/test_timm_official.py` 与 `tests/test_timm_distributed.py`。
+前者覆盖模型接口、清单、损失、文件、指标、阶段与提交规则；后者用四个 CPU/Gloo worker
+检查DDP梯度数学、累积同步边界、无补齐验证、BN 恢复、错误广播和有界预检，不认证PPU/NCCL或BF16算子。
+真实 timm 架构的合成32输入前后向另有独立测试，pretrained=False，不算预训练载入或512目标批量验收。
+旧测试缺失的历史配置从 Git fac2347 原样固化到 tests/fixtures/legacy_configs，仅用于回归。
+本轮未读取真实图像、未下载预训练权重、未进行真实预检/完整训练/官方test预测或平台上传；T4延迟未测。

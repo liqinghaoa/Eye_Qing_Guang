@@ -30,7 +30,8 @@ from eye_qing_guang.metrics.development import prediction_metrics, write_develop
 from eye_qing_guang.models.factory import build_model
 from eye_qing_guang.trainers.binary import finish_update, make_scaler, train_accumulated_epoch
 from eye_qing_guang.trainers.schedules import DevelopmentStopping, SuccessfulUpdateSchedule, fit_length
-from eye_qing_guang.utils.experiment_io import load_config, read_csv, write_csv
+from eye_qing_guang.utils.experiment_io import read_csv, write_csv
+from config_fixtures import load_config
 from eye_qing_guang.pipelines.b0_development import new_progress
 from eye_qing_guang.pipelines.b0_development import train_development
 from eye_qing_guang.pipelines.preflight import preflight

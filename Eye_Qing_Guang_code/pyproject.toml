@@ -21,6 +21,10 @@ dependencies = [
 [project.scripts]
 eye-qing-guang = "eye_qing_guang.cli:main"
 
+[project.optional-dependencies]
+# Install only into an already compatible torch/torchvision environment; never upgrade the PPU stack implicitly.
+timm-experiment = ["timm==1.0.22"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

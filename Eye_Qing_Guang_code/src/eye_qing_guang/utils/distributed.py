@@ -106,8 +106,21 @@ def initialize_distributed(config):
     from eye_qing_guang.contracts.config import validate_config
 
     validate_config(config)
+    return _initialize_ppu_ddp(config)
+
+
+def initialize_timm_distributed(config):
+    """Initialize the same four-rank PPU/NCCL runtime for the independent timm recipe."""
+    from eye_qing_guang.contracts.timm_config import validate_timm_config
+
+    validate_timm_config(config)
+    return _initialize_ppu_ddp(config)
+
+
+def _initialize_ppu_ddp(config):
     if config["experiment"]["protocol"] != "b0_dev_ddp_v1":
-        raise ValueError("A DDP configuration is required.")
+        if config["experiment"]["protocol"] != "timm_official_trainvalid_v1":
+            raise ValueError("An explicitly supported four-rank DDP configuration is required.")
     options = config["distributed"]
     try:
         rank, local_rank, world_size = (int(os.environ[key]) for key in ("RANK", "LOCAL_RANK", "WORLD_SIZE"))

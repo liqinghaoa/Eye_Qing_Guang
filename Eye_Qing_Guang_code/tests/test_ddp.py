@@ -33,7 +33,8 @@ from eye_qing_guang.pipelines.preflight import ReplayLoader, clipped_gradients
 from eye_qing_guang.trainers.binary import finish_update, make_scaler, train_accumulated_epoch
 from eye_qing_guang.trainers.schedules import DevelopmentStopping, SuccessfulUpdateSchedule
 from eye_qing_guang.utils.distributed import DistributedContext, close_distributed, initialize_distributed
-from eye_qing_guang.utils.experiment_io import load_config, new_experiment, read_csv
+from eye_qing_guang.utils.experiment_io import new_experiment, read_csv
+from config_fixtures import load_config
 from eye_qing_guang.pipelines.inference import predict_test
 from eye_qing_guang.pipelines.evaluation import evaluate_checkpoint
 

@@ -22,7 +22,8 @@ from eye_qing_guang.datasets.loaders import make_loader
 from eye_qing_guang.trainers.binary import make_training_scaler
 from eye_qing_guang.trainers.schedules import DevelopmentStopping, SuccessfulUpdateSchedule
 from eye_qing_guang.utils.distributed import DistributedContext
-from eye_qing_guang.utils.experiment_io import load_config, new_experiment
+from eye_qing_guang.utils.experiment_io import new_experiment
+from config_fixtures import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 

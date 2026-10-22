@@ -20,7 +20,7 @@ from eye_qing_guang.trainers.binary import (
     check_runtime_precision, finish_update, make_training_scaler, train_accumulated_epoch, training_autocast,
 )
 from eye_qing_guang.trainers.schedules import SuccessfulUpdateSchedule
-from eye_qing_guang.utils.experiment_io import load_config
+from config_fixtures import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 
