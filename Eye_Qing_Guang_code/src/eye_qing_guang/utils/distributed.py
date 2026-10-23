@@ -111,15 +111,19 @@ def initialize_distributed(config):
 
 def initialize_timm_distributed(config):
     """Initialize the same four-rank PPU/NCCL runtime for the independent timm recipe."""
-    from eye_qing_guang.contracts.timm_config import validate_timm_config
-
-    validate_timm_config(config)
+    if config["experiment"]["protocol"] == "timm_convnext_official_trainvalid_v1":
+        from eye_qing_guang.contracts.convnext_config import validate_convnext_config
+        validate_convnext_config(config)
+    else:
+        from eye_qing_guang.contracts.timm_config import validate_timm_config
+        validate_timm_config(config)
     return _initialize_ppu_ddp(config)
 
 
 def _initialize_ppu_ddp(config):
     if config["experiment"]["protocol"] != "b0_dev_ddp_v1":
-        if config["experiment"]["protocol"] != "timm_official_trainvalid_v1":
+        if config["experiment"]["protocol"] not in {
+                "timm_official_trainvalid_v1", "timm_convnext_official_trainvalid_v1"}:
             raise ValueError("An explicitly supported four-rank DDP configuration is required.")
     options = config["distributed"]
     try:

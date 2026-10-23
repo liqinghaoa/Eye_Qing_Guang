@@ -1,7 +1,16 @@
-Eye_Qing_Guang_code为项目代码；
-Eye_Qing_Guang_research为比赛背景文件、思路规划、实验记录等文档。
-01_Background_and_Literature为比赛背景相关为文档；
-02_Research_Ideas为实验思路；
-03_Method_and_Experiment为实验具体实现思路；
-04_Experiment_Records为实验记录；
-05_Results_and_Decisions为实验总结及讨论。
+- Eye_Qing_Guang_code为项目代码；
+
+- Eye_Qing_Guang_research为比赛背景文件、思路规划、实验记录等文档。
+
+  - 01_Background_and_Literature为比赛背景相关为文档；
+  - 02_Research_Ideas为实验思路；
+  - 03_Method_and_Experiment为实验具体实现思路；
+  - 04_Experiment_Records为实验记录;
+  - 05_Results_and_Decisions为实验总结及讨论。
+  
+| ID    | 提交时间            | 科目         | 文件名         | 状态       | 分数  | 查看备注信息 |
+|-------|---------------------|--------------|----------------|------------|-------|--------------|
+| 16907 | 2026-10-22 19:00:18 | 大数据挑战赛 | submission.csv | 已正确评分 | 97.64 |              |
+| 16169 | 2026-10-21 19:40:35 | 大数据挑战赛 | submission.csv | 已正确评分 | 96.20 |              |
+| 15653 | 2026-10-20 23:41:21 | 大数据挑战赛 | submission.csv | 已正确评分 | 95.55 |              |
+| 14942 | 2026-10-19 23:09:05 | 大数据挑战赛 | submission.csv | 已正确评分 | 60.29 |              |
