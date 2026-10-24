@@ -3,6 +3,7 @@
 import copy
 import json
 import math
+import os
 import time
 from pathlib import Path
 
@@ -31,7 +32,8 @@ STAGES = ("training", "best_validation", "test_inference", "submission")
 
 
 def _loader(records, config, root, device, runtime=None, *, training=False):
-    return make_loader(records, config, root, age_stats=None, training=training, device=device, distributed=runtime)
+    sharding = runtime if config["distributed"]["enabled"] else None
+    return make_loader(records, config, root, age_stats=None, training=training, device=device, distributed=sharding)
 
 
 def _new_directory(directory):
@@ -306,6 +308,13 @@ def run_timm_experiment(config_path, root, *, preflight_only=False, preflight_ve
     started = time.monotonic()
     try:
         records, sources = runtime.primary("official_manifests", lambda: ensure_official_manifests(config, root))
+        if config["data"].get("cache", {}).get("enabled", False):
+            from eye_qing_guang.datasets.offline_cache import cached_records, cache_signature
+            def validate_cache():
+                cached_records([row for split in records.values() for row in split], config["data"], root)
+            runtime.primary("offline_cache_validation", validate_cache)
+            sources["offline_cache"] = {"root": config["data"]["cache"]["root"],
+                                        "signature": cache_signature(config["data"], root)}
         if skip_preflight:
             preflight = {"status": "skipped", "target_batch_memory": "skipped",
                          "config": config, "target_device": str(device),
@@ -337,11 +346,13 @@ def run_timm_experiment(config_path, root, *, preflight_only=False, preflight_ve
             preflight=("skipped_by_cli" if skip_preflight else str(flight_dir)),
             loss="bce", pos_weight=5.0, auto_pos_weight=False,
             focal_gamma="unused_for_this_run",
-            effective_batch=(config["distributed"]["world_size"] * config["training"]["batch_size"]
+            effective_batch=(runtime.world_size * config["training"]["batch_size"]
                              * config["training"]["accumulation_steps"]),
             precision=config["training"]["precision"], scaler_enabled=False,
-            gradient_transport="native_ddp", training_engine=config["recipe"],
-            torch_version=str(torch.__version__), world_size=4, t4_latency_status="not_measured")
+            gradient_transport=config["distributed"]["gradient_transport"], training_engine=config["recipe"],
+            device=str(device), cuda_visible_devices=os.environ.get("CUDA_VISIBLE_DEVICES"),
+            micro_batch=config["training"]["batch_size"], accumulation_steps=config["training"]["accumulation_steps"],
+            torch_version=str(torch.__version__), world_size=runtime.world_size, t4_latency_status="not_measured")
         def start_run():
             write_yaml(directory / "config_snapshot.yaml", config)
             manifest["stages"]["training"].update(status="running", completed_epochs=0, samples=0)

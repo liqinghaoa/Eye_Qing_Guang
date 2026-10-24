@@ -7,6 +7,8 @@ import yaml
 
 PROTOCOL = "timm_convnext_official_trainvalid_v1"
 MODEL_NAME = "convnext_tiny.fb_in22k_ft_in1k"
+MODEL_NAME_IN1K = "convnext_tiny.fb_in1k"
+SUPPORTED_MODEL_NAMES = (MODEL_NAME, MODEL_NAME_IN1K)
 EXPECTED_COUNTS = {"train": 51396, "valid": 5849, "test": 5855}
 PREPROCESSING = {"version": "fov_letterbox_v1", "preview_size": 512, "threshold": 8,
                  "min_line_fraction": 0.01, "margin": 0.02, "min_area": 0.5, "min_coverage": 0.995}
@@ -67,6 +69,8 @@ def unresolved_recipe(config):
 def validate_convnext_config(config, *, require_resolved=True):
     _exact(config, " ".join(FIELDS), "config")
     for section, keys in FIELDS.items():
+        if section == "data" and isinstance(config[section], dict) and "cache" in config[section]:
+            keys += " cache"
         _exact(config[section], keys, section)
     exp, data, model, train, distributed = (config[k] for k in ("experiment", "data", "model", "training", "distributed"))
     _exact(config["recipe"], FIELDS["recipe"], "recipe")
@@ -76,7 +80,7 @@ def validate_convnext_config(config, *, require_resolved=True):
     for key in ("output_root",):
         if not isinstance(exp[key], str) or not exp[key]:
             raise ValueError(f"experiment.{key} is required.")
-    if (model["library"] != "timm" or model["name"] != MODEL_NAME or model["pretrained"] is not True
+    if (model["library"] != "timm" or model["name"] not in SUPPORTED_MODEL_NAMES or model["pretrained"] is not True
             or model["use_age"] is not False or model["dropout"] != 0.0 or model["drop_path_rate"] != 0.0
             or model["batchnorm"] != "not_applicable" or not isinstance(model["timm_version"], str)):
         raise ValueError("Invalid timm model identity; no backbone aliases or alternate initialization are allowed.")
@@ -84,8 +88,11 @@ def validate_convnext_config(config, *, require_resolved=True):
         raise ValueError("model.pretrained_file must be a prepared local file or null for local HF cache lookup.")
     if not isinstance(model["pretrained_revision"], str) or not model["pretrained_revision"]:
         raise ValueError("model.pretrained_revision must be explicit.")
+    from eye_qing_guang.datasets.offline_cache import validate_cache_settings, VERSION
+    validate_cache_settings(data)
+    offline_preprocessing = {**PREPROCESSING, "version": VERSION}
     if (data["image_size"] != 512 or data["mean"] != [0.485, 0.456, 0.406] or data["std"] != [0.229, 0.224, 0.225]
-            or data["preprocessing"] != PREPROCESSING or data["augmentation"] != AUGMENTATION):
+            or data["preprocessing"] not in (PREPROCESSING, offline_preprocessing) or data["augmentation"] != AUGMENTATION):
         raise ValueError("The complete fixed ConvNeXt RGB/FOV/BILINEAR/letterbox-512 recipe is required.")
     for key in ("raw_root", "manifest_dir", "image_column", "label_column", "age_column"):
         if not isinstance(data[key], str) or not data[key]:
@@ -119,9 +126,15 @@ def validate_convnext_config(config, *, require_resolved=True):
         raise ValueError("FP32 training must set training.amp=false.")
     if train["precision"] == "bf16" and not train["amp"]:
         raise ValueError("BF16 training must set training.amp=true.")
-    if (distributed["enabled"] is not True or distributed["world_size"] != 4
-            or distributed["gradient_transport"] != "native_ddp" or distributed["cpus_per_rank"] != 6):
-        raise ValueError("The official run uses four ranks and the project's existing native DDP backend.")
+    if type(distributed["enabled"]) is not bool or type(distributed["world_size"]) is not int:
+        raise ValueError("distributed.enabled must be boolean and world_size must be integer.")
+    if distributed["enabled"]:
+        if (distributed["world_size"] != 4 or distributed["gradient_transport"] != "native_ddp"
+                or distributed["cpus_per_rank"] != 6):
+            raise ValueError("DDP requires four ranks and the existing native DDP settings.")
+    elif distributed["world_size"] != 1 or distributed["gradient_transport"] != "none":
+        raise ValueError("Single-process training requires world_size=1 and gradient_transport=none.")
+    _positive_int(distributed["cpus_per_rank"], "distributed.cpus_per_rank")
     if (config["evaluation"] != {"threshold": 0.5, "precision": "fp32", "expected_valid_count": 5849,
                                   "duplicate_logit_atol": 1e-6}
             or config["submission"] != {"mode": "competition", "id_column": "Image_name",
@@ -167,15 +180,16 @@ def validate_convnext_config(config, *, require_resolved=True):
         raise ValueError("Explicit AdamW betas are required.")
     _number(train["eps"], "training.eps")
     if not isinstance(train["device"], str) or not train["device"].startswith("cuda"):
-        raise ValueError("The PPU recipe must explicitly use a CUDA-compatible device.")
+        raise ValueError("The recipe must explicitly use a CUDA-compatible device.")
     if train["early_stopping_enabled"]:
         _positive_int(train["min_epochs"], "min_epochs")
         _positive_int(train["patience"], "patience")
         _number(train["min_delta"], "min_delta", positive=False)
         if train["min_epochs"] > train["epochs"]:
             raise ValueError("min_epochs exceeds epochs.")
-    if distributed["backend"] != "nccl":
-        raise ValueError("The ConvNeXt PPU runtime requires the existing NCCL-compatible backend.")
+    expected_backend = "nccl" if distributed["enabled"] else "none"
+    if distributed["backend"] != expected_backend:
+        raise ValueError(f"This execution mode requires distributed.backend={expected_backend}.")
     if distributed["multiprocessing_context"] not in ("spawn", "forkserver"):
         raise ValueError("Data workers require an explicit safe spawn/forkserver context.")
     for key in ("timeout_seconds",):

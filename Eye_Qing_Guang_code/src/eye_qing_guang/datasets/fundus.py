@@ -23,7 +23,10 @@ class FundusDataset(Dataset):
     def __getitem__(self, index):
         row = self.records[index]
         with Image.open(resolve_path(row["image_path"], self.root)) as source:
-            image = self.transform(source.convert("RGB"))
+            if "_cache_split" in row:
+                image = self.transform.from_cache(source, row["_cache_split"])
+            else:
+                image = self.transform(source.convert("RGB"))
         sample = {
             "image": image,
             "age": torch.tensor([normalize_age(row["age"], self.age_stats)], dtype=torch.float32),

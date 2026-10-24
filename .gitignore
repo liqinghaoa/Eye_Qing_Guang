@@ -2,8 +2,8 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-/build/
-/dist/
+/Eye_Qing_Guang_code/build/
+/Eye_Qing_Guang_code/dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -22,16 +22,18 @@ venv/
 Thumbs.db
 
 # Raw data stays local; documentation and contracts remain version-controlled.
-/data
+/Eye_Qing_Guang_code/data/
+/Eye_Qing_Guang_code/weights/
+
 
 # Each experiment is independent; weights and generated artifacts stay local.
-/experiments/*
-!/experiments/.gitkeep
-/outputs/
+/Eye_Qing_Guang_code/experiments/*
+!/Eye_Qing_Guang_code/experiments/.gitkeep
+/Eye_Qing_Guang_code/outputs/
 *.pt
 *.pth
 *.ckpt
 *.onnx
 *.log
-/wandb/
-/runs/
+/Eye_Qing_Guang_code/wandb/
+/Eye_Qing_Guang_code/runs/

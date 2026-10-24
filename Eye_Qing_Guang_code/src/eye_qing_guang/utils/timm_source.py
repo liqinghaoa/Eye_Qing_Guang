@@ -1,4 +1,4 @@
-"""Adapter over the project's already validated four-rank B0 native DDP runtime."""
+"""Local single-device execution and the existing four-rank native DDP adapter."""
 
 import os
 from contextlib import contextmanager, nullcontext
@@ -20,6 +20,76 @@ def launch_coordinates():
     if world != 4 or rank != local_rank or not 0 <= rank < 4:
         raise RuntimeError("This experiment requires one node and exactly four local ranks.")
     return coordinates
+
+
+class SingleDeviceRuntime:
+    """Local execution only: no process group, DDP wrapper or collectives."""
+
+    rank = local_rank = 0
+    world_size = 1
+
+    def __init__(self, config, device):
+        self.config, self.device = config, device
+        self.closed = False
+
+    def checked(self, phase, action):
+        return action()
+
+    def primary(self, phase, action):
+        return action()
+
+    def broadcast(self, value):
+        return value
+
+    def sum_numbers(self, numbers):
+        return numbers
+
+    def gather_predictions(self, rows):
+        return rows
+
+    def initialize_model(self, model):
+        return model
+
+    def unwrap_model(self, model):
+        return model
+
+    def verify_parameters(self, model):
+        if any(not torch.isfinite(p).all() for p in model.parameters()):
+            raise FloatingPointError("Non-finite model parameters.")
+
+    def average_gradients(self, model, local_samples):
+        return None
+
+    def accumulation_context(self, model, synchronize):
+        return nullcontext()
+
+    def evaluation_state(self, model):
+        return nullcontext()
+
+    def close(self):
+        self.closed = True
+
+
+def _single_device_runtime(config):
+    # Reject a multi-process launcher before any device or output is touched.
+    try:
+        coordinates = {key: int(os.environ.get(key, default)) for key, default in (
+            ("WORLD_SIZE", "1"), ("LOCAL_WORLD_SIZE", "1"),
+            ("RANK", "0"), ("LOCAL_RANK", "0"))}
+    except ValueError as exc:
+        raise RuntimeError("Invalid launcher environment for single-process training.") from exc
+    if coordinates != {"WORLD_SIZE": 1, "LOCAL_WORLD_SIZE": 1, "RANK": 0, "LOCAL_RANK": 0}:
+        raise RuntimeError("Single-card configuration requires one Python process; do not launch multiple ranks.")
+    if dist.is_initialized():
+        raise RuntimeError("Single-card training requires no active distributed process group.")
+    device = torch.device(config["training"]["device"])
+    if device.type != "cuda" or not torch.cuda.is_available():
+        raise RuntimeError("Single-card training requires an available CUDA device.")
+    device = torch.device("cuda", 0 if device.index is None else device.index)
+    if device.index >= torch.cuda.device_count():
+        raise RuntimeError(f"Selected device {device} is outside CUDA_VISIBLE_DEVICES.")
+    torch.cuda.set_device(device)
+    return SingleDeviceRuntime(config, device)
 
 
 class B0DDPRuntime:
@@ -112,12 +182,25 @@ class B0DDPRuntime:
 
 
 def create_source_runtime(config, root=None):
+    if (config["experiment"]["protocol"] in {"timm_official_trainvalid_v1", "timm_convnext_official_trainvalid_v1"}
+            and config["distributed"]["enabled"] is False):
+        if config["experiment"]["protocol"] == "timm_convnext_official_trainvalid_v1":
+            from eye_qing_guang.contracts.convnext_config import validate_convnext_config
+            validate_convnext_config(config)
+        else:
+            from eye_qing_guang.contracts.timm_config import validate_timm_config
+            validate_timm_config(config)
+        runtime = _single_device_runtime(config)
+        if config["training"]["precision"] == "bf16" and not torch.cuda.is_bf16_supported():
+            runtime.close()
+            raise RuntimeError("BF16 is unavailable on the selected device; choose explicit FP32 configuration.")
+        return runtime, runtime.device
     rank, local_rank, world = launch_coordinates()
     runtime = B0DDPRuntime(config)
     if (runtime.rank, runtime.local_rank, runtime.world_size) != (rank, local_rank, world):
         runtime.close()
         raise RuntimeError("torchrun rank topology changed during initialization.")
-    if not torch.cuda.is_bf16_supported():
+    if config["training"]["precision"] == "bf16" and not torch.cuda.is_bf16_supported():
         runtime.close()
         raise RuntimeError("BF16 is unavailable on the selected PPU build; no automatic precision downgrade.")
     return runtime, runtime.device

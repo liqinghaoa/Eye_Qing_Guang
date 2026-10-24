@@ -1,0 +1,105 @@
+# Single RTX 3090: select the allocated physical GPU with CUDA_VISIBLE_DEVICES before launch.
+# Relative paths are anchored at --project-root. Pretrained weights must be prepared locally.
+experiment:
+  name: timm_v2s_in21k_ft_in1k_512_pw5_official_single3090_s42_v1
+  protocol: timm_official_trainvalid_v1
+  seed: 42
+  output_root: experiments
+recipe:
+  implementation: timm_single_device_v1
+  implementation_path: src/eye_qing_guang/utils/timm_source.py
+  parameter_notes: 'Single-device AdamW/all_trainable, successful-update warmup/cosine; microbatch 8 x accumulation 16 = effective batch 128; no process group.'
+data:
+  raw_root: /data2/liqinghao/Eye_Qing_Guang/data/raw/glaucoma_first
+  manifest_dir: data/manifests/glaucoma_first_official_single3090_v1
+  image_column: Image_name
+  label_column: True_Label
+  age_column: Age
+  splits:
+    train: {csv: train.csv, images: train, labeled: true}
+    valid: {csv: valid.csv, images: valid, labeled: true}
+    test: {csv: test.csv, images: test, labeled: false}
+  image_size: 512
+  num_workers: 4
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
+  preprocessing:
+    version: fov_letterbox_v1
+    preview_size: 512
+    threshold: 8
+    min_line_fraction: 0.01
+    margin: 0.02
+    min_area: 0.5
+    min_coverage: 0.995
+  augmentation:
+    horizontal_flip: 0.5
+    rotation_degrees: 10
+    brightness: [0.9, 1.1]
+    contrast: [0.9, 1.1]
+model:
+  library: timm
+  name: tf_efficientnetv2_s.in21k_ft_in1k
+  pretrained: true
+  # Validated with the already installed local package; PPU compatibility is not certified.
+  timm_version: 1.0.22
+  pretrained_file: null
+  pretrained_revision: main
+  dropout: 0.0
+  drop_path_rate: 0.0
+  batchnorm: native_local
+  use_age: false
+training:
+  optimizer: adamw
+  optimizer_parameter_groups: all_trainable
+  epochs: 100
+  batch_size: 8
+  eval_batch_size: 16
+  accumulation_steps: 16
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+  loss: bce
+  pos_weight: 5.0
+  auto_pos_weight: false
+  device: cuda:0
+  precision: bf16
+  amp: true
+  grad_clip: 5.0
+  max_consecutive_skips: null
+  scheduler: warmup_cosine_success_v1
+  schedule_total_epochs: 100
+  warmup_epochs: 5
+  warmup_start_lr: 0.0001
+  min_lr: 1.0e-6
+  monitor: roc_auc
+  early_stopping_enabled: true
+  min_epochs: 30
+  min_delta: 0.0001
+  patience: 15
+distributed:
+  enabled: false
+  world_size: 1
+  gradient_transport: none
+  cpus_per_rank: 6
+  backend: none
+  timeout_seconds: 900
+  multiprocessing_context: spawn
+  log_every_n_groups: 10
+evaluation:
+  threshold: 0.5
+  precision: fp32
+  expected_valid_count: 5849
+  duplicate_logit_atol: 1.0e-6
+preflight:
+  max_sample_instances: 64
+  validation_samples: 8
+  gradient_relative_l2_max: 0.1
+  gradient_max_abs: 0.1
+  reload_atol: 1.0e-6
+  reload_rtol: 1.0e-5
+submission:
+  mode: competition
+  id_column: Image_name
+  value_column: Probability
+  label_column: Pred_Label

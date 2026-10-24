@@ -67,6 +67,8 @@ def unresolved_recipe(config):
 def validate_timm_config(config, *, require_resolved=True):
     _exact(config, " ".join(FIELDS), "config")
     for section, keys in FIELDS.items():
+        if section == "data" and isinstance(config[section], dict) and "cache" in config[section]:
+            keys += " cache"
         _exact(config[section], keys, section)
     exp, data, model, train, distributed = (config[k] for k in ("experiment", "data", "model", "training", "distributed"))
     _exact(config["recipe"], FIELDS["recipe"], "recipe")
@@ -84,8 +86,11 @@ def validate_timm_config(config, *, require_resolved=True):
         raise ValueError("model.pretrained_file must be a prepared local file or null for local HF cache lookup.")
     if not isinstance(model["pretrained_revision"], str) or not model["pretrained_revision"]:
         raise ValueError("model.pretrained_revision must be explicit.")
+    from eye_qing_guang.datasets.offline_cache import validate_cache_settings
+    validate_cache_settings(data)
+    offline_preprocessing = {**PREPROCESSING, "version": "fov_presized_letterbox_v2"}
     if (data["image_size"] != 512 or data["mean"] != [0.5]*3 or data["std"] != [0.5]*3
-            or data["preprocessing"] != PREPROCESSING or data["augmentation"] != AUGMENTATION):
+            or data["preprocessing"] not in (PREPROCESSING, offline_preprocessing) or data["augmentation"] != AUGMENTATION):
         raise ValueError("The complete fixed RGB/FOV/BILINEAR/letterbox-512 recipe is required.")
     for key in ("raw_root", "manifest_dir", "image_column", "label_column", "age_column"):
         if not isinstance(data[key], str) or not data[key]:
@@ -119,9 +124,15 @@ def validate_timm_config(config, *, require_resolved=True):
         raise ValueError("FP32 training must set training.amp=false.")
     if train["precision"] == "bf16" and not train["amp"]:
         raise ValueError("BF16 training must set training.amp=true.")
-    if (distributed["enabled"] is not True or distributed["world_size"] != 4
-            or distributed["gradient_transport"] != "native_ddp" or distributed["cpus_per_rank"] != 6):
-        raise ValueError("The official run uses four ranks and the project's existing native DDP backend.")
+    if type(distributed["enabled"]) is not bool or type(distributed["world_size"]) is not int:
+        raise ValueError("distributed.enabled must be boolean and world_size must be integer.")
+    if distributed["enabled"]:
+        if (distributed["world_size"] != 4 or distributed["gradient_transport"] != "native_ddp"
+                or distributed["cpus_per_rank"] != 6):
+            raise ValueError("DDP requires four ranks and the existing native DDP settings.")
+    elif distributed["world_size"] != 1 or distributed["gradient_transport"] != "none":
+        raise ValueError("Single-process training requires world_size=1 and gradient_transport=none.")
+    _positive_int(distributed["cpus_per_rank"], "distributed.cpus_per_rank")
     if (config["evaluation"] != {"threshold": 0.5, "precision": "fp32", "expected_valid_count": 5849,
                                   "duplicate_logit_atol": 1e-6}
             or config["submission"] != {"mode": "competition", "id_column": "Image_name",
@@ -167,15 +178,16 @@ def validate_timm_config(config, *, require_resolved=True):
         raise ValueError("Explicit AdamW betas are required.")
     _number(train["eps"], "training.eps")
     if not isinstance(train["device"], str) or not train["device"].startswith("cuda"):
-        raise ValueError("The PPU recipe must explicitly use a CUDA-compatible device.")
+        raise ValueError("The recipe must explicitly use a CUDA-compatible device.")
     if train["early_stopping_enabled"]:
         _positive_int(train["min_epochs"], "min_epochs")
         _positive_int(train["patience"], "patience")
         _number(train["min_delta"], "min_delta", positive=False)
         if train["min_epochs"] > train["epochs"]:
             raise ValueError("min_epochs exceeds epochs.")
-    if distributed["backend"] != "nccl":
-        raise ValueError("The B0 PPU runtime requires the existing NCCL-compatible backend.")
+    expected_backend = "nccl" if distributed["enabled"] else "none"
+    if distributed["backend"] != expected_backend:
+        raise ValueError(f"This execution mode requires distributed.backend={expected_backend}.")
     if distributed["multiprocessing_context"] not in ("spawn", "forkserver"):
         raise ValueError("Data workers require an explicit safe spawn/forkserver context.")
     for key in ("timeout_seconds",):

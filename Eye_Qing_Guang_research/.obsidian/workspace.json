@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "04_Experiment_Records/小队思路总结.md",
+                "file": "01_Background_and_Literature/大数据挑战赛 - 提交作品.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "小队思路总结"
+              "title": "大数据挑战赛 - 提交作品"
             }
           }
         ]
@@ -161,7 +161,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "04_Experiment_Records/小队思路总结.md",
+                "file": "01_Background_and_Literature/大数据挑战赛 - 提交作品.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -188,17 +188,18 @@
       "bases:新建数据库": false
     }
   },
-  "active": "e71ade72777c9646",
+  "active": "ba8a7f47081067cc",
   "lastOpenFiles": [
+    "01_Background_and_Literature/比赛参赛规则.pdf",
+    "01_Background_and_Literature/大数据挑战赛 - 提交作品.md",
+    "01_Background_and_Literature/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
+    "01_Background_and_Literature/青光眼二分类与数据挑战研究综述.md",
+    "04_Experiment_Records/小队思路总结.md",
     "03_Method_and_Experiment/timm_ConvNeXtTiny_fb_in22k_ft_in1k_512_pw5_官方train_valid_联合推理提交实验实现方案_v1.md",
     "02_Research_Ideas/~$TFound-green.docx",
     "05_Results_and_Decisions/实验总结.md",
     "02_Research_Ideas/RETFound-green.docx",
-    "04_Experiment_Records/小队思路总结.md",
     "04_Experiment_Records/baseline_evaluation.md",
-    "01_Background_and_Literature/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
-    "01_Background_and_Literature/青光眼二分类与数据挑战研究综述.md",
-    "01_Background_and_Literature/大数据挑战赛 - 提交作品.md",
     "02_Research_Ideas/青光眼二分类竞赛研究思路与实验路线_v1.md",
     "03_Method_and_Experiment/timm_EfficientNetV2S_in21k_ft_in1k_512_pw5_官方train_valid_联合推理提交实验实现方案_v1.md",
     "03_Method_and_Experiment/B0_ResNet50_512_基线实验实现方案_v1.md",
@@ -210,7 +211,6 @@
     "01_Background_and_Literature/key_papers/2022_Lopez_FundusQ_Net_arXiv.pdf",
     "01_Background_and_Literature/key_papers/2020_Ren_Balanced_Meta_Softmax_arXiv.pdf",
     "01_Background_and_Literature/key_papers/2019_Touvron_FixRes_arXiv.pdf",
-    "01_Background_and_Literature/key_papers/2021_Menon_Long_Tail_Logit_Adjustment_arXiv.pdf",
     "raw/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md"
   ]
 }

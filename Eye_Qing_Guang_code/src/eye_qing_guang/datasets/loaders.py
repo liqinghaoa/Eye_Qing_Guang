@@ -11,6 +11,9 @@ from eye_qing_guang.utils.reproducibility import seed_worker
 
 def make_loader(records, config, root, age_stats=None, training=False, device=None,
                 distributed=None):
+    if config["data"].get("cache", {}).get("enabled", False):
+        from eye_qing_guang.datasets.offline_cache import cached_records
+        records = cached_records(records, config["data"], root)
     dataset = FundusDataset(
         records, root, build_transforms(config["data"], training), age_stats,
     )
@@ -34,7 +37,9 @@ def make_loader(records, config, root, age_stats=None, training=False, device=No
             sampler = list(range(rank, len(dataset), distributed.world_size))
     # Worker safety is independent of sharding: root-only checkpoint evaluation
     # also runs while the DDP process group is alive, without a distributed sampler.
-    if config["data"].get("num_workers", 0) and config.get("distributed", {}).get("enabled", False):
+    single_timm = (config["experiment"].get("protocol") in {"timm_official_trainvalid_v1", "timm_convnext_official_trainvalid_v1"}
+                   and config.get("distributed", {}).get("enabled") is False)
+    if config["data"].get("num_workers", 0) and (single_timm or config.get("distributed", {}).get("enabled", False)):
         options["multiprocessing_context"] = config["distributed"]["multiprocessing_context"]
         if config.get("diagnostics", {}).get("enabled", False):
             options["timeout"] = config["diagnostics"]["data_timeout_seconds"]

@@ -575,3 +575,163 @@ torchrun --standalone --nnodes=1 --nproc_per_node=4 \
 真实 timm 架构的合成32输入前后向另有独立测试，pretrained=False，不算预训练载入或512目标批量验收。
 旧测试缺失的历史配置从 Git fac2347 原样固化到 tests/fixtures/legacy_configs，仅用于回归。
 本轮未读取真实图像、未下载预训练权重、未进行真实预检/完整训练/官方test预测或平台上传；T4延迟未测。
+
+### 单张 RTX 3090 训练（2026-10-23）
+
+新增配置 `configs/timm_v2s_in21k_ft_in1k_512_pw5_official_single3090.yaml`，
+以普通 Python 单进程运行，不初始化进程组、不包装 DDP、不执行 NCCL 通信。
+原四卡配置与 torchrun 入口继续保留。单卡仍使用相同模型、官方 train/valid/test、
+512 预处理、pw5、全参数微调、验证选模和训练后自动生成提交的流程。
+
+初始配置为训练 microbatch 8、累积16次、验证 batch16、workers4、BF16，
+完整更新的有效 batch 为 `1 × 8 × 16 = 128`。每轮处理全部51396张训练图，
+最后不足一组的样本仍参与更新，按实际样本数归一化。
+累积不会合并 BatchNorm 的微批次统计，因此有效 batch 相同不代表与四卡训练数值等价。
+这些是待在24GB设备上验证的起始参数，代码不会自动切换精度或减小 batch。
+
+`data.raw_root` 暂沿用此前3090服务器的
+`/data2/liqinghao/Eye_Qing_Guang/data/raw/glaucoma_first`，运行前请核对新服务器实际位置；
+该目录下应直接包含 train.csv、valid.csv、test.csv 及相应图像目录。
+新配置使用独立 manifest 目录，避免复用PPU服务器上的绝对图像路径。
+环境需有兼容3090驱动的 PyTorch/CUDA 构建、`timm==1.0.22`，以及
+`model.pretrained_file` 指定的本地权重或已有HF缓存；代码不会自动下载权重。
+
+进入实际代码项目目录后执行以下直接训练命令。物理卡编号2仅为示例，
+务必替换为分配给自己的卡号；进程内 `cuda:0` 会映射到这张物理卡：
+
+```bash
+cd /实际代码项目目录
+export CUDA_VISIBLE_DEVICES=2
+export PYTHONUNBUFFERED=1
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
+python -u scripts/run/run_timm_v2s_experiment.py \
+  --project-root "$PWD" \
+  --config configs/timm_v2s_in21k_ft_in1k_512_pw5_official_single3090.yaml \
+  --skip-preflight
+```
+
+此命令直接开始正式训练，不执行预检。若使用可选预检，仍需独立选择预检目录版本和预算；
+默认小批量预检不证明目标 batch 的显存可用。单卡配置拒绝多rank启动。
+输出固定为 `experiments/timm_v2s_in21k_ft_in1k_512_pw5_official_single3090_s42_v1/`，
+已有目录拒绝覆盖；完整流程成功后提交文件为该目录的 `submission/submission.csv`。
+本次没有增加断点续训能力，best/last仍是仅供推理的format3权重。
+本地验证覆盖单卡合成流程与原四进程CPU/Gloo回归，不代表真实3090、BF16、预训练权重或完整数据验收。
+
+### V2-S 单卡离线预处理缓存（2026-10-23）
+
+新配置 `configs/timm_v2s_in21k_ft_in1k_512_pw5_official_single3090_cache_v1.yaml`
+显式启用 `data.cache`，原四卡和原单卡配置继续从原图执行旧版在线处理。
+原始目录为 `/data2/liqinghao/Eye_Qing_Guang/data/raw/glaucoma_first`，缓存目录为
+`/data2/liqinghao/Eye_Qing_Guang/data/processed/glaucoma_first_fov512_cache_v1`。
+缓存可以被不同训练进程数共用；不要让多个训练rank重复构建。
+
+训练缓存为FOV裁剪、最长边缩放至512的RGB无损PNG，保持长宽比、不提前补边；
+运行时继续随机翻转、旋转、亮度/对比度，随后letterbox至512及Normalize。
+valid/test提前完成FOV与letterbox，运行时只转Tensor和Normalize。
+预处理版本为 `fov_presized_letterbox_v2`：训练先缩小再增强，与旧版增强顺序有差异，
+因此使用独立实验名从头训练。验证/测试保持旧版固定处理的像素结果。
+
+在服务器实际项目根目录、已准备好的Python环境中执行一次CPU缓存生成：
+
+```bash
+python -u scripts/preprocess/build_offline_cache.py \
+  --project-root "$PWD" \
+  --config configs/timm_v2s_in21k_ft_in1k_512_pw5_official_single3090_cache_v1.yaml \
+  --workers 4
+```
+
+`--workers`是缓存生成进程数，与训练的 `data.num_workers` 无关；0为串行。
+程序先核对官方数量51396/5849/5855及源文件，再检查每个split前两张图片，
+通过后处理全部63100张。每500张打印进度，末尾输出 `Cache completed`。
+无需GPU、timm模型或预训练权重，不启动实验训练、不进行预测。
+只生成图像，不使用test标签；原始数据不变。
+
+`index.csv`保存原始ID/划分/标签与缓存PNG的对应关系，PNG按split和序号命名，
+提交仍保留原始ID及扩展名；`metadata.json`记录处理版本、Pillow版本、数量与完成状态。
+已有缓存目录拒绝覆盖；生成失败保留部分文件并拒绝训练使用，重新构建应选择新的
+`data.cache.root`版本目录，不会自动删除或续写旧目录。
+缓存与原始图片/CSV需同时保留，源路径、大小或修改时间变化时拒绝使用，避免读取过期缓存。
+缓存启用但文件缺失时直接报错，不静默退回在线处理。
+
+确认缓存生成成功、预训练权重已在本地文件或HF缓存中准备好后，可直接训练。
+以下物理卡2仅为示例，替换成分配给自己的卡号：
+
+```bash
+export CUDA_VISIBLE_DEVICES=2
+export PYTHONUNBUFFERED=1
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
+python -u scripts/run/run_timm_v2s_experiment.py \
+  --project-root "$PWD" \
+  --config configs/timm_v2s_in21k_ft_in1k_512_pw5_official_single3090_cache_v1.yaml \
+  --skip-preflight
+```
+
+默认训练batch8、累积16、验证batch16、workers4、BF16不变。
+训练、每轮验证、best重载验证及test提交全部通过同一缓存读取入口。
+输出为 `experiments/timm_v2s_in21k_ft_in1k_512_pw5_official_single3090_cache_s42_v1/`，
+完整流程成功后包含 `submission/submission.csv`，已有实验目录拒绝覆盖。
+检查点保存新版处理配置；在另一环境需要读取原图时，可显式将同版本配置的
+`data.cache.enabled`设为false，通过相同v2固定处理恢复输入，程序不自动切换。
+此功能尚未在服务器全量数据上执行，不承诺实际提速比例；PNG仍需解码，随机增强仍在线执行。
+
+### ConvNeXt-Tiny 单卡与共享缓存（2026-10-23）
+
+新增原图单卡配置 `configs/timm_convnext_tiny_fb_in22k_ft_in1k_512_pw5_official_single3090.yaml`，
+以及缓存单卡配置 `configs/timm_convnext_tiny_fb_in22k_ft_in1k_512_pw5_official_single3090_cache_v1.yaml`。
+原四卡配置保持不变。单卡使用普通Python进程，不初始化进程组或DDP/NCCL，
+通过 `CUDA_VISIBLE_DEVICES` 选择分配给自己的物理卡，进程内使用 `cuda:0`。
+
+两份新配置均为batch8、累积16、验证batch16、workers4、BF16，有效batch128；
+原来的AdamW、学习率、pw5、官方划分、早停和AUROC选模规则保留。
+这些batch参数尚未在真实3090上验收，不会自动降级精度或batch。
+ConvNeXt始终使用mean=[0.485,0.456,0.406]、std=[0.229,0.224,0.225]，
+模型为 `convnext_tiny.fb_in22k_ft_in1k`，不会使用V2-S的模型权重或Normalize。
+
+缓存配置直接复用 `/data2/liqinghao/Eye_Qing_Guang/data/processed/glaucoma_first_fov512_cache_v1`，
+因为缓存为Normalize之前的RGB图，缓存标识不依赖模型或mean/std。
+V2-S已生成并完成的缓存无需重新生成；ConvNeXt使用独立manifest与实验目录。
+原始图片与CSV仍需保留，源数据路径为 `/data2/liqinghao/Eye_Qing_Guang/data/raw/glaucoma_first`。
+训练继续在线随机增强，固定预处理采用已记录的v2顺序，验证及提交读取相同缓存版本。
+
+如果缓存尚未生成，可以使用前述V2-S命令，也可使用同一个构建程序传ConvNeXt配置：
+
+```bash
+python -u scripts/preprocess/build_offline_cache.py \
+  --project-root "$PWD" \
+  --config configs/timm_convnext_tiny_fb_in22k_ft_in1k_512_pw5_official_single3090_cache_v1.yaml \
+  --workers 4
+```
+
+已有缓存目录会拒绝覆盖，不能再次执行生成命令覆盖已完成的V2-S缓存。
+准备好 `timm==1.0.22` 和ConvNeXt自己的预训练权重后，在项目根目录运行：
+
+```bash
+# 物理卡2仅为示例，替换为分配给自己的卡号。
+export CUDA_VISIBLE_DEVICES=2
+export PYTHONUNBUFFERED=1
+export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
+python -u scripts/run/run_timm_convnext_experiment.py \
+  --project-root "$PWD" \
+  --config configs/timm_convnext_tiny_fb_in22k_ft_in1k_512_pw5_official_single3090_cache_v1.yaml \
+  --skip-preflight
+```
+
+该命令跳过预检直接训练。`model.pretrained_file: null`仅查已有HF缓存；
+独立权重文件需填入此字段，程序不会自动下载。
+完整流程结束后输出
+`experiments/timm_convnext_tiny_fb_in22k_ft_in1k_512_pw5_official_single3090_cache_s42_v1/submission/submission.csv`。
+如果选择原图单卡配置，输出名中不含cache，走旧版在线预处理。
+现有best/last仍为format3推理权重，没有增加续训能力；已有输出目录拒绝覆盖。
+本地以合成模型验证控制流程、梯度与缓存复用，不代表真实ConvNeXt预训练载入或3090/BF16验收。

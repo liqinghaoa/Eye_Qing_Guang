@@ -64,6 +64,21 @@ def letterbox(image, size):
     return canvas
 
 
+OFFLINE_VERSION = "fov_presized_letterbox_v2"
+
+
+def prepare_offline_image(image, data, split):
+    """Deterministic uint8 RGB prefix; training intentionally resizes before augmentation."""
+    image, info = fov_crop(image, data["preprocessing"])
+    if split == "train":
+        image = image.resize(scaled_size(*image.size, data["image_size"]), Image.Resampling.BILINEAR)
+    elif split in ("valid", "test"):
+        image = letterbox(image, data["image_size"])
+    else:
+        raise ValueError(f"Unknown cache split: {split}")
+    return image, info
+
+
 class FOVLetterbox:
     def __init__(self, data, training=False):
         self.data, self.training = data, training
@@ -75,8 +90,7 @@ class FOVLetterbox:
     def uniform(low, high):
         return float(torch.empty(1).uniform_(low, high).item())
 
-    def __call__(self, image):
-        image, _ = fov_crop(image, self.data["preprocessing"])
+    def augment(self, image):
         if self.training:
             aug = self.data["augmentation"]
             if torch.rand(1).item() < aug["horizontal_flip"]:
@@ -85,11 +99,39 @@ class FOVLetterbox:
             image = image.rotate(angle, Image.Resampling.BILINEAR, expand=True, fillcolor=(0, 0, 0))
             image = ImageEnhance.Brightness(image).enhance(self.uniform(*aug["brightness"]))
             image = ImageEnhance.Contrast(image).enhance(self.uniform(*aug["contrast"]))
+        return image
+
+    def __call__(self, image):
+        image, _ = fov_crop(image, self.data["preprocessing"])
+        image = self.augment(image)
         return self.normalize(letterbox(image, self.data["image_size"]))
+
+
+class OfflineFOVLetterbox(FOVLetterbox):
+    """Versioned resize-before-augmentation recipe, with explicit raw fallback."""
+
+    def from_cache(self, image, split):
+        size = self.data["image_size"]
+        if image.mode != "RGB" or (max(image.size) != size if split == "train" else image.size != (size, size)):
+            raise ValueError(f"Invalid {split} cache image: {image.mode}/{image.size}")
+        if self.training and split != "train":
+            raise ValueError("Only official train images may receive training augmentation.")
+        if split == "train":
+            return self.normalize(letterbox(self.augment(image), size))
+        if split not in ("valid", "test"):
+            raise ValueError(f"Unknown cache split: {split}")
+        return self.normalize(image)
+
+    def __call__(self, image):
+        split = "train" if self.training else "valid"
+        prepared, _ = prepare_offline_image(image, self.data, split)
+        return self.from_cache(prepared, split)
 
 
 def build_transforms(data: dict, training: bool = False):
     version = data.get("preprocessing", {}).get("version", "legacy_resize_v1")
+    if version == OFFLINE_VERSION:
+        return OfflineFOVLetterbox(data, training)
     if version == "fov_letterbox_v1":
         return FOVLetterbox(data, training)
     if version != "legacy_resize_v1":
