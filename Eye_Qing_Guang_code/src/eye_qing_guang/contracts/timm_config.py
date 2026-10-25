@@ -7,6 +7,7 @@ import yaml
 
 PROTOCOL = "timm_official_trainvalid_v1"
 MODEL_NAME = "tf_efficientnetv2_s.in21k_ft_in1k"
+SUPPORTED_IMAGE_SIZES = (288, 512)
 EXPECTED_COUNTS = {"train": 51396, "valid": 5849, "test": 5855}
 PREPROCESSING = {"version": "fov_letterbox_v1", "preview_size": 512, "threshold": 8,
                  "min_line_fraction": 0.01, "margin": 0.02, "min_area": 0.5, "min_coverage": 0.995}
@@ -89,9 +90,9 @@ def validate_timm_config(config, *, require_resolved=True):
     from eye_qing_guang.datasets.offline_cache import validate_cache_settings
     validate_cache_settings(data)
     offline_preprocessing = {**PREPROCESSING, "version": "fov_presized_letterbox_v2"}
-    if (data["image_size"] != 512 or data["mean"] != [0.5]*3 or data["std"] != [0.5]*3
+    if (data["image_size"] not in SUPPORTED_IMAGE_SIZES or data["mean"] != [0.5]*3 or data["std"] != [0.5]*3
             or data["preprocessing"] not in (PREPROCESSING, offline_preprocessing) or data["augmentation"] != AUGMENTATION):
-        raise ValueError("The complete fixed RGB/FOV/BILINEAR/letterbox-512 recipe is required.")
+        raise ValueError("The complete fixed RGB/FOV/BILINEAR/letterbox-288-or-512 recipe is required.")
     for key in ("raw_root", "manifest_dir", "image_column", "label_column", "age_column"):
         if not isinstance(data[key], str) or not data[key]:
             raise ValueError(f"data.{key} is required.")

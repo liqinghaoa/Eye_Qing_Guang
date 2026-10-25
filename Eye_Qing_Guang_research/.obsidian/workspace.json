@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "01_Background_and_Literature/大数据挑战赛 - 提交作品.md",
+                "file": "05_Results_and_Decisions/实验总结.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "大数据挑战赛 - 提交作品"
+              "title": "实验总结"
             }
           }
         ]
@@ -83,7 +83,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 280.16668701171875
+    "width": 280.16668701171875,
+    "collapsed": true
   },
   "right": {
     "id": "04cbc26a8dc33fac",
@@ -161,7 +162,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "01_Background_and_Literature/大数据挑战赛 - 提交作品.md",
+                "file": "05_Results_and_Decisions/实验总结.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -193,6 +194,7 @@
     "01_Background_and_Literature/比赛参赛规则.pdf",
     "01_Background_and_Literature/大数据挑战赛 - 提交作品.md",
     "01_Background_and_Literature/2026年第八届全国高校计算机能力挑战赛官网 - 大数据挑战赛.md",
+    "02_Research_Ideas/青光眼二分类竞赛研究思路与实验路线_v1.md",
     "01_Background_and_Literature/青光眼二分类与数据挑战研究综述.md",
     "04_Experiment_Records/小队思路总结.md",
     "03_Method_and_Experiment/timm_ConvNeXtTiny_fb_in22k_ft_in1k_512_pw5_官方train_valid_联合推理提交实验实现方案_v1.md",
@@ -200,7 +202,6 @@
     "05_Results_and_Decisions/实验总结.md",
     "02_Research_Ideas/RETFound-green.docx",
     "04_Experiment_Records/baseline_evaluation.md",
-    "02_Research_Ideas/青光眼二分类竞赛研究思路与实验路线_v1.md",
     "03_Method_and_Experiment/timm_EfficientNetV2S_in21k_ft_in1k_512_pw5_官方train_valid_联合推理提交实验实现方案_v1.md",
     "03_Method_and_Experiment/B0_ResNet50_512_基线实验实现方案_v1.md",
     "01_Background_and_Literature/【大数据挑战赛·常见问题参考】2026年第八届全国高校计算机能力挑战赛.xlsx",
