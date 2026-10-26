@@ -9,6 +9,7 @@ from contextlib import nullcontext
 import torch
 
 from eye_qing_guang.trainers.schedules import SuccessfulUpdateSchedule
+from eye_qing_guang.contracts.convnext_config import weighted_bce_key
 
 
 def build_optimizer_schedule(model, settings, groups_per_epoch):
@@ -24,8 +25,15 @@ def build_optimizer_schedule(model, settings, groups_per_epoch):
     return optimizer, SuccessfulUpdateSchedule(optimizer, groups_per_epoch, settings)
 
 
+def weighted_bce_loss(device, pos_weight):
+    weighted_bce_key(pos_weight)
+    return torch.nn.BCEWithLogitsLoss(
+        pos_weight=torch.tensor([pos_weight], dtype=torch.float32, device=device), reduction="mean")
+
+
 def pw5_loss(device):
-    return torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([5.0], dtype=torch.float32, device=device), reduction="mean")
+    """Legacy fixed-weight entry point retained for the 512 final-fit protocol."""
+    return weighted_bce_loss(device, 5.0)
 
 
 def autocast_context(device, precision):
@@ -42,7 +50,7 @@ def update_group(model, group, optimizer, schedule, device, settings, runtime, *
     if count <= 0:
         raise ValueError("Empty accumulation group.")
     optimizer.zero_grad(set_to_none=True)
-    criterion = pw5_loss(device)
+    criterion = weighted_bce_loss(device, settings["pos_weight"])
     weighted_sum = 0.0
     for batch_index, batch in enumerate(group):
         def forward_backward():
@@ -102,7 +110,7 @@ def train_epoch(model, loader, optimizer, schedule, device, settings, runtime, e
                   f"loss={total/samples:.6f} lr={optimizer.param_groups[0]['lr']:.8g} "
                   f"elapsed={elapsed:.1f}s local_samples/s={samples/elapsed:.1f}", flush=True)
     summed = runtime.sum_numbers([samples, total, groups])
-    return {"consumed_samples": int(summed[0]), "weighted_bce_pw5": summed[1]/summed[0],
+    return {"consumed_samples": int(summed[0]), weighted_bce_key(settings["pos_weight"]): summed[1]/summed[0],
             "successful_updates": schedule.successful_updates, "groups": groups,
             "lr": optimizer.param_groups[0]["lr"]}
 

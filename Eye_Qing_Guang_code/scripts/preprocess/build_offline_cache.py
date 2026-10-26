@@ -26,7 +26,10 @@ def main():
     config_path = resolve_path(args.config, root)
     with config_path.open(encoding="utf-8") as handle:
         protocol = yaml.safe_load(handle).get("experiment", {}).get("protocol")
-    if protocol == "timm_convnext_official_trainvalid_v1":
+    if protocol == "timm_convnext_kd_official_v1":
+        from eye_qing_guang.contracts.convnext_kd_config import load_kd_config
+        config = load_kd_config(config_path)
+    elif protocol == "timm_convnext_official_trainvalid_v1":
         from eye_qing_guang.contracts.convnext_config import load_convnext_config
         config = load_convnext_config(config_path)
     elif protocol == "timm_official_trainvalid_v1":

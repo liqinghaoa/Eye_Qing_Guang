@@ -182,9 +182,12 @@ class B0DDPRuntime:
 
 
 def create_source_runtime(config, root=None):
-    if (config["experiment"]["protocol"] in {"timm_official_trainvalid_v1", "timm_convnext_official_trainvalid_v1", "timm_convnext_final_fit_v1"}
+    if (config["experiment"]["protocol"] in {"timm_official_trainvalid_v1", "timm_convnext_official_trainvalid_v1", "timm_convnext_final_fit_v1", "timm_convnext_kd_official_v1"}
             and config["distributed"]["enabled"] is False):
-        if config["experiment"]["protocol"] == "timm_convnext_final_fit_v1":
+        if config["experiment"]["protocol"] == "timm_convnext_kd_official_v1":
+            from eye_qing_guang.contracts.convnext_kd_config import validate_kd_config
+            validate_kd_config(config)
+        elif config["experiment"]["protocol"] == "timm_convnext_final_fit_v1":
             from eye_qing_guang.contracts.convnext_final_config import validate_convnext_final_config
             validate_convnext_final_config(config)
         elif config["experiment"]["protocol"] == "timm_convnext_official_trainvalid_v1":

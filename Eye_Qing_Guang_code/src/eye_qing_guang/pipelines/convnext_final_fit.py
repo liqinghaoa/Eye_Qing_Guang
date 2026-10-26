@@ -112,7 +112,8 @@ def run_convnext_final_fit(config_path, root):
             device=str(device), cuda_visible_devices=__import__("os").environ.get("CUDA_VISIBLE_DEVICES"))
         runtime.primary("formal_start", lambda: (write_yaml(directory / "config_snapshot.yaml", config), atomic_json(directory / "run_manifest.json", manifest)))
         seed_everything(config["experiment"]["seed"])
-        model, metadata = runtime.checked("formal_model", lambda: build_convnext_model(config["model"], root))
+        model, metadata = runtime.checked("formal_model", lambda: build_convnext_model(
+            config["model"], root, image_size=config["data"]["image_size"]))
         model = runtime.initialize_model(model.to(device))
         manifest["model_metadata"] = metadata
         atomic_json(directory / "run_manifest.json", manifest)

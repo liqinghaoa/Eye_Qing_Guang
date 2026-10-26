@@ -735,3 +735,54 @@ python -u scripts/run/run_timm_convnext_experiment.py \
 如果选择原图单卡配置，输出名中不含cache，走旧版在线预处理。
 现有best/last仍为format3推理权重，没有增加续训能力；已有输出目录拒绝覆盖。
 本地以合成模型验证控制流程、梯度与缓存复用，不代表真实ConvNeXt预训练载入或3090/BF16验收。
+
+## ConvNeXt 512 冻结三教师蒸馏 v1
+
+独立协议为 timm_convnext_kd_official_v1，以官方train训练学生、valid选优，
+训练结束后只用学生对test推理。E1（standard）使用等权概率平均目标；
+E2（rectified）只将该目标改为二分类ARM校正。两组完整配置分别为：
+
+- configs/timm_convnext_tiny_fb_in1k_512_pw5_kd_ens3_std_official_single3090_s42_v1.yaml
+- configs/timm_convnext_tiny_fb_in1k_512_pw5_kd_ens3_rect_official_single3090_s42_v1.yaml
+
+单次命令只运行一组。v1固定512/pw5、BF16学生、48×16累积和原100轮学习率计划；
+教师为FP32，chunk=8，无梯度且始终eval。优化器只有学生参数。监督损失pw5，
+软BCE不加权，alpha=1、temperature=1。该方法是受CTRCL启发的图像级蒸馏改造。
+
+准备三份既有任务best权重（ConvNeXt 1K epoch7、ConvNeXt 22K epoch9、V2-S epoch7）
+及各自原始 predictions/best/valid_predictions.csv，再准备
+weights/convnext_tiny.fb_in1k.safetensors。三份教师在配置中有固定路径和身份；
+不会自动下载或替换。数据raw_root、cache.root和manifest_dir需对应当前机器。
+允许复用已完成的512缓存和官方清单，无需重新生成缓存。相对路径均以
+--project-root为准。教师历史checkpoint中的旧数据路径不会被用于加载训练数据。
+
+实现阶段只运行合成测试。需要在目标GPU验证时，先执行一次独立的有界预检：
+
+    export CUDA_VISIBLE_DEVICES=2
+    python -u scripts/run/run_timm_convnext_kd.py \
+      --project-root "$PWD" \
+      --config configs/timm_convnext_tiny_fb_in1k_512_pw5_kd_ens3_std_official_single3090_s42_v1.yaml \
+      --preflight-only \
+      --preflight-output experiments/preflight_convnext_kd_ens3_512_s42_v1 \
+      --max-preflight-sample-instances 216
+
+该预检对8张valid图核对三教师已保存预测，并对48张train图做教师前向和学生反向，
+不做optimizer.step，总计216次模型前向图像实例。低于216在任何前向前拒绝，
+不创建正式实验目录，也不推理test。已有预检目录拒绝覆盖。
+
+预检通过且准备正式训练时，使用同一入口去掉三个预检参数。普通运行不会隐式再做预检：
+
+    python -u scripts/run/run_timm_convnext_kd.py \
+      --project-root "$PWD" \
+      --config configs/timm_convnext_tiny_fb_in1k_512_pw5_kd_ens3_std_official_single3090_s42_v1.yaml
+
+E2换用rect配置，保持独立输出。正式输出存在（包括空目录）时拒绝运行。
+每组只保存学生best.pt/last.pt（format4，推理权重，不支持续训），并自动生成
+submission/submission.csv。日志含监督/软BCE、KL诊断、目标熵、教师错误及校正数量；
+valid仅计算真实标签pw5损失与原指标。模型体积按实际文件记录，T4耗时保持not_measured。
+
+学生可通过 contracts.convnext_kd_checkpoints.load_kd_student_checkpoint 独立加载；
+不会读取教师文件或重新加载ImageNet权重。单独推理入口为
+scripts/infer/predict_timm_convnext_kd.py，参数为
+--project-root、--checkpoint、--manifest、--output、--device。manifest需包含当前机器可访问的
+原始图像路径；该入口使用相同确定性FOV/letterbox配方，输出原始概率预测CSV。

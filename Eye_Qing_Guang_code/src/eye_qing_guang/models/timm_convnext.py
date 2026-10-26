@@ -55,7 +55,7 @@ def prepared_pretrained_file(settings, root):
     return path
 
 
-def build_convnext_model(settings, root, *, initialize_pretrained=True):
+def build_convnext_model(settings, root, *, initialize_pretrained=True, image_size=None):
     model_name = settings.get("name")
     if (settings["library"] != "timm" or model_name not in SUPPORTED_MODEL_NAMES
             or settings["use_age"] is not False or settings["dropout"] != 0.0
@@ -87,7 +87,9 @@ def build_convnext_model(settings, root, *, initialize_pretrained=True):
     model = ImageClassifier(encoder, encoder.num_features, dropout=0.0)
     for parameter in model.parameters():
         parameter.requires_grad_(True)
+    preprocessing = (f"{image_size} RGB/FOV/BILINEAR/letterbox; no timm center crop"
+                     if image_size is not None else "RGB/FOV/BILINEAR/letterbox; no timm center crop")
     metadata = {"timm_version": version, "model_name": model_name, "num_features": 768,
                 "num_classes": 0, "global_pool": "avg", "initialization": "pretrained" if initialize_pretrained else "checkpoint_reload",
-                "source": source, "normalization": "layernorm", "preprocessing_difference": "512 RGB/FOV/BILINEAR/letterbox; no timm center crop"}
+                "source": source, "normalization": "layernorm", "preprocessing_difference": preprocessing}
     return model, metadata

@@ -9,7 +9,8 @@ PROTOCOL = "timm_convnext_official_trainvalid_v1"
 MODEL_NAME = "convnext_tiny.fb_in22k_ft_in1k"
 MODEL_NAME_IN1K = "convnext_tiny.fb_in1k"
 SUPPORTED_MODEL_NAMES = (MODEL_NAME, MODEL_NAME_IN1K)
-SUPPORTED_IMAGE_SIZES = (288, 512)
+SUPPORTED_IMAGE_SIZES = (224, 288, 512)
+SUPPORTED_POS_WEIGHTS = (5.0, 10.0)
 EXPECTED_COUNTS = {"train": 51396, "valid": 5849, "test": 5855}
 PREPROCESSING = {"version": "fov_letterbox_v1", "preview_size": 512, "threshold": 8,
                  "min_line_fraction": 0.01, "margin": 0.02, "min_area": 0.5, "min_coverage": 0.995}
@@ -30,6 +31,12 @@ FIELDS = {
 
 class UnresolvedRecipeError(ValueError):
     pass
+
+
+def weighted_bce_key(pos_weight):
+    if type(pos_weight) not in (int, float) or pos_weight not in SUPPORTED_POS_WEIGHTS:
+        raise ValueError("ConvNeXt pos_weight must be 5 or 10.")
+    return f"weighted_bce_pw{int(pos_weight)}"
 
 
 def _exact(mapping, keys, where):
@@ -94,7 +101,7 @@ def validate_convnext_config(config, *, require_resolved=True):
     offline_preprocessing = {**PREPROCESSING, "version": VERSION}
     if (data["image_size"] not in SUPPORTED_IMAGE_SIZES or data["mean"] != [0.485, 0.456, 0.406] or data["std"] != [0.229, 0.224, 0.225]
             or data["preprocessing"] not in (PREPROCESSING, offline_preprocessing) or data["augmentation"] != AUGMENTATION):
-        raise ValueError("The complete fixed ConvNeXt RGB/FOV/BILINEAR/letterbox-288-or-512 recipe is required.")
+        raise ValueError("The complete fixed ConvNeXt RGB/FOV/BILINEAR/letterbox-224-288-or-512 recipe is required.")
     for key in ("raw_root", "manifest_dir", "image_column", "label_column", "age_column"):
         if not isinstance(data[key], str) or not data[key]:
             raise ValueError(f"data.{key} is required.")
@@ -118,9 +125,10 @@ def validate_convnext_config(config, *, require_resolved=True):
             _positive_int(train[key], f"training.{key}")
     for key in ("learning_rate", "weight_decay", "eps", "warmup_start_lr", "min_lr"):
         _number(train[key], f"training.{key}")
-    if (train["loss"] != "bce" or train["pos_weight"] != 5.0
+    if (train["loss"] != "bce" or type(train["pos_weight"]) not in (int, float)
+            or train["pos_weight"] not in SUPPORTED_POS_WEIGHTS
             or train["auto_pos_weight"] is not False or train["monitor"] != "roc_auc"):
-        raise ValueError("This implementation currently fixes BCE with positive-class weight 5 and AUROC selection.")
+        raise ValueError("This implementation supports BCE with pos_weight=5 or 10 and AUROC selection.")
     if train["precision"] not in ("fp32", "bf16") or type(train["amp"]) is not bool:
         raise ValueError("training.precision must be fp32 or bf16 and training.amp must be boolean.")
     if train["precision"] == "fp32" and train["amp"]:

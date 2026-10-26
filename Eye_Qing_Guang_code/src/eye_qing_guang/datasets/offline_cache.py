@@ -128,7 +128,7 @@ def _representative_check(records, data, root):
 
 def build_offline_cache(config, root, *, workers=4):
     from PIL import __version__ as pillow_version
-    if config["experiment"]["protocol"] in {"timm_convnext_official_trainvalid_v1", "timm_convnext_final_fit_v1"}:
+    if config["experiment"]["protocol"] in {"timm_convnext_official_trainvalid_v1", "timm_convnext_final_fit_v1", "timm_convnext_kd_official_v1"}:
         from eye_qing_guang.datasets.convnext_official import official_records
     elif config["experiment"]["protocol"] == "timm_official_trainvalid_v1":
         from eye_qing_guang.datasets.timm_official import official_records

@@ -11,14 +11,14 @@ import numpy as np
 import torch
 
 from eye_qing_guang.contracts.convnext_checkpoints import ConvNeXtCheckpointStore, load_convnext_checkpoint
-from eye_qing_guang.contracts.convnext_config import load_convnext_config
+from eye_qing_guang.contracts.convnext_config import load_convnext_config, weighted_bce_key
 from eye_qing_guang.datasets.loaders import make_loader
 from eye_qing_guang.datasets.convnext_official import ensure_official_manifests, ordered_predictions
 from eye_qing_guang.evaluators.binary import predict_batches
 from eye_qing_guang.metrics.convnext_official import compute_official_metrics
 from eye_qing_guang.models.timm_convnext import build_convnext_model
 from eye_qing_guang.trainers.convnext_official import (
-    SelectionState, build_optimizer_schedule, pw5_loss, train_epoch, update_group,
+    SelectionState, build_optimizer_schedule, weighted_bce_loss, train_epoch, update_group,
 )
 from eye_qing_guang.utils.experiment_io import read_csv, run_manifest, write_yaml
 from eye_qing_guang.utils.paths import resolve_path
@@ -61,8 +61,9 @@ def compare_predictions(actual, expected, records, config):
         maximum[field] = float(np.max(np.abs(left-right)))
         if not np.allclose(left, right, atol=config["preflight"]["reload_atol"], rtol=config["preflight"]["reload_rtol"]):
             raise ValueError(f"Best reload {field} differs from selected-epoch predictions: max_abs={maximum[field]}")
-    actual_auc = compute_official_metrics(actual, 0.0)["roc_auc"]
-    expected_auc = compute_official_metrics(expected, 0.0)["roc_auc"]
+    pos_weight = config["training"]["pos_weight"]
+    actual_auc = compute_official_metrics(actual, 0.0, pos_weight)["roc_auc"]
+    expected_auc = compute_official_metrics(expected, 0.0, pos_weight)["roc_auc"]
     if actual_auc != expected_auc:
         raise ValueError("Best reload changed selection AUROC.")
     return maximum
@@ -73,14 +74,15 @@ def distributed_validation(model, records, config, root, device, runtime):
     eval_model = runtime.unwrap_model(model) if hasattr(runtime, "unwrap_model") else model
     with runtime.evaluation_state(model):
         local_rows, local_mean = runtime.checked("validation_forward", lambda: predict_batches(
-            eval_model, loader, device, criterion=pw5_loss(device), allow_empty=True))
+            eval_model, loader, device,
+            criterion=weighted_bce_loss(device, config["training"]["pos_weight"]), allow_empty=True))
         gathered = runtime.gather_predictions(local_rows)
         numbers = runtime.sum_numbers([len(local_rows), len(local_rows)*local_mean if local_rows else 0.0])
     def finalize():
         if int(numbers[0]) != len(records):
             raise ValueError("Validation sharding padded or lost official records.")
         rows = ordered_predictions(gathered, records, labeled=True)
-        return rows, compute_official_metrics(rows, numbers[1]/numbers[0])
+        return rows, compute_official_metrics(rows, numbers[1]/numbers[0], config["training"]["pos_weight"])
     # Only metrics are broadcast; full ordered predictions stay on primary.
     finalized = runtime.checked("validation_metrics", lambda: finalize() if runtime.rank == 0 else None)
     metrics = runtime.broadcast(finalized[1] if runtime.rank == 0 else None)
@@ -88,6 +90,8 @@ def distributed_validation(model, records, config, root, device, runtime):
 
 
 def training_stage(model, metadata, records, config, root, device, runtime, directory, manifest):
+    pos_weight = config["training"]["pos_weight"]
+    loss_key = weighted_bce_key(pos_weight)
     loader = runtime.checked("training_loader", lambda: _loader(records["train"], config, root, device, runtime, training=True))
     groups = math.ceil(len(loader)/config["training"]["accumulation_steps"])
     optimizer, schedule = runtime.checked("optimizer_and_schedule", lambda: build_optimizer_schedule(model, config["training"], groups))
@@ -107,8 +111,8 @@ def training_stage(model, metadata, records, config, root, device, runtime, dire
                 store.save("best.pt", model, epoch, config, metrics, metadata)
                 atomic_csv(directory / "predictions/best/valid_predictions.csv", rows, VALID_FIELDS)
             store.save("last.pt", model, epoch, config, metrics, metadata)
-            item = {"epoch": epoch, "train_weighted_bce_pw5": train["weighted_bce_pw5"],
-                    "valid_weighted_bce_pw5": metrics["weighted_bce_pw5"], "roc_auc": metrics["roc_auc"],
+            item = {"epoch": epoch, f"train_{loss_key}": train[loss_key],
+                    f"valid_{loss_key}": metrics[loss_key], "roc_auc": metrics["roc_auc"],
                     "average_precision": metrics["average_precision"], "lr": train["lr"],
                     "successful_updates": train["successful_updates"], "consumed_samples": train["consumed_samples"],
                     "seconds": time.monotonic()-started}
@@ -118,7 +122,8 @@ def training_stage(model, metadata, records, config, root, device, runtime, dire
             manifest["stages"]["training"].update(status="running", completed_epochs=epoch,
                                                      samples=epoch*len(records["train"]))
             atomic_json(directory / "run_manifest.json", manifest)
-            print(f"Epoch {epoch}: train_pw5={train['weighted_bce_pw5']:.6f}, valid_pw5={metrics['weighted_bce_pw5']:.6f}, "
+            print(f"Epoch {epoch}: train_pw{int(pos_weight)}={train[loss_key]:.6f}, "
+                  f"valid_pw{int(pos_weight)}={metrics[loss_key]:.6f}, "
                   f"AUROC={metrics['roc_auc']:.8f}, AP={metrics['average_precision']:.8f}, best={selection.best_epoch}, "
                   f"samples={train['consumed_samples']}, elapsed={item['seconds']:.1f}s", flush=True)
             return {"stop": stop, "best_epoch": selection.best_epoch, "best_valid_auroc": selection.best_raw}
@@ -143,11 +148,12 @@ def post_training(directory, records, config, root, device, manifest):
         if frozen != config:
             raise ValueError("Best checkpoint configuration differs from this frozen run.")
         valid_loader = _loader(records["valid"], frozen, root, device)
-        rows, mean = predict_batches(model, valid_loader, device, criterion=pw5_loss(device))
+        rows, mean = predict_batches(model, valid_loader, device,
+                                     criterion=weighted_bce_loss(device, frozen["training"]["pos_weight"]))
         rows = ordered_predictions(rows, records["valid"], labeled=True)
         saved = read_csv(directory / "predictions/best/valid_predictions.csv")
         differences = compare_predictions(rows, saved, records["valid"], frozen)
-        metrics = compute_official_metrics(rows, mean)
+        metrics = compute_official_metrics(rows, mean, frozen["training"]["pos_weight"])
         if metrics["roc_auc"] != payload["metrics"]["roc_auc"]:
             raise ValueError("Reloaded best AUROC differs from saved checkpoint metrics.")
         atomic_json(directory / "reports/valid_best_metrics.json", {**metrics, "reload_max_abs": differences})
@@ -220,7 +226,8 @@ def execute_preflight(config, records, root, device, runtime, directory, maximum
         seed_everything(config["experiment"]["seed"])
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
-        model, metadata = runtime.checked("preflight_model", lambda: build_convnext_model(config["model"], root))
+        model, metadata = runtime.checked("preflight_model", lambda: build_convnext_model(
+            config["model"], root, image_size=config["data"]["image_size"]))
         model = model.to(device)
         model = runtime.initialize_model(model)
         initial = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
@@ -344,7 +351,7 @@ def run_convnext_experiment(config_path, root, *, preflight_only=False, prefligh
         manifest = run_manifest("running", protocol=config["experiment"]["protocol"],
             stages={s: {"status": "not_started"} for s in STAGES}, sources=sources, config=config,
             preflight=("skipped_by_cli" if skip_preflight else str(flight_dir)),
-            loss="bce", pos_weight=5.0, auto_pos_weight=False,
+            loss="bce", pos_weight=config["training"]["pos_weight"], auto_pos_weight=False,
             focal_gamma="unused_for_this_run",
             effective_batch=(runtime.world_size * config["training"]["batch_size"]
                              * config["training"]["accumulation_steps"]),
@@ -359,7 +366,8 @@ def run_convnext_experiment(config_path, root, *, preflight_only=False, prefligh
             atomic_json(directory / "run_manifest.json", manifest)
         runtime.primary("formal_start", start_run)
         seed_everything(config["experiment"]["seed"])
-        model, metadata = runtime.checked("formal_model", lambda: build_convnext_model(config["model"], root))
+        model, metadata = runtime.checked("formal_model", lambda: build_convnext_model(
+            config["model"], root, image_size=config["data"]["image_size"]))
         model = model.to(device)
         model = runtime.initialize_model(model)
         manifest["model_metadata"] = metadata

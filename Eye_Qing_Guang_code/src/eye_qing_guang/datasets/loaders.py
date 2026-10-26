@@ -37,7 +37,7 @@ def make_loader(records, config, root, age_stats=None, training=False, device=No
             sampler = list(range(rank, len(dataset), distributed.world_size))
     # Worker safety is independent of sharding: root-only checkpoint evaluation
     # also runs while the DDP process group is alive, without a distributed sampler.
-    single_timm = (config["experiment"].get("protocol") in {"timm_official_trainvalid_v1", "timm_convnext_official_trainvalid_v1", "timm_convnext_final_fit_v1"}
+    single_timm = (config["experiment"].get("protocol") in {"timm_official_trainvalid_v1", "timm_convnext_official_trainvalid_v1", "timm_convnext_final_fit_v1", "timm_convnext_kd_official_v1"}
                    and config.get("distributed", {}).get("enabled") is False)
     if config["data"].get("num_workers", 0) and (single_timm or config.get("distributed", {}).get("enabled", False)):
         options["multiprocessing_context"] = config["distributed"]["multiprocessing_context"]

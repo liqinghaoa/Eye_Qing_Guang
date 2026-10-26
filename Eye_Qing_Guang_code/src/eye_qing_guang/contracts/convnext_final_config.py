@@ -29,6 +29,8 @@ def validate_convnext_final_config(config, *, require_resolved=True):
         raise ValueError("Final-fit early-stopping fields must be null.")
     if training.get("schedule_total_epochs") != 100 or training.get("warmup_epochs") != 5:
         raise ValueError("Final-fit must retain the 100-epoch schedule and five-epoch warmup curve.")
+    if training.get("pos_weight") != 5.0:
+        raise ValueError("The existing final-fit protocol is fixed at pos_weight=5.")
     if config["evaluation"].get("expected_valid_count") != 5849:
         raise ValueError("The source official valid count must remain recorded as 5849.")
     base = copy.deepcopy(config)

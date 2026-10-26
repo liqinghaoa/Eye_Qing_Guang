@@ -25,7 +25,7 @@ from eye_qing_guang.contracts.timm_checkpoints import load_timm_checkpoint
 from eye_qing_guang.datasets.convnext_official import official_records
 from eye_qing_guang.datasets.offline_cache import build_offline_cache, cached_records, cache_signature
 from eye_qing_guang.pipelines.convnext_official import _loader, execute_preflight, run_convnext_experiment
-from eye_qing_guang.trainers.convnext_official import build_optimizer_schedule, pw5_loss, update_group, train_epoch
+from eye_qing_guang.trainers.convnext_official import build_optimizer_schedule, pw5_loss, weighted_bce_loss, update_group, train_epoch
 from eye_qing_guang.utils.experiment_io import write_csv, read_csv, write_yaml
 from eye_qing_guang.utils.timm_source import SingleDeviceRuntime, create_source_runtime
 
@@ -165,6 +165,74 @@ class ConvNeXtSingleTest(unittest.TestCase):
         self.assertFalse(torch.equal((raw-mean)/std, (raw-.5)/.5))
         with self.assertRaises(FileExistsError):
             build_offline_cache(self.config, self.root, workers=0)
+
+    def test_224_config_builds_separate_cache_and_loader_inputs(self):
+        config = load_convnext_config(ROOT / "configs/timm_convnext_tiny_fb_in1k_224_pw5_official_single3090_cache_v1.yaml")
+        reference = load_convnext_config(ROOT / "configs/timm_convnext_tiny_fb_in1k_288_pw5_official_single3090_cache_v1.yaml")
+        self.assertEqual(config["model"], reference["model"])
+        self.assertEqual(config["training"], reference["training"])
+        self.assertEqual(config["data"]["augmentation"], reference["data"]["augmentation"])
+        self.assertEqual((config["data"]["image_size"], reference["data"]["image_size"]), (224, 288))
+        self.assertNotEqual(config["experiment"]["name"], reference["experiment"]["name"])
+        self.assertNotEqual(config["data"]["cache"]["root"], reference["data"]["cache"]["root"])
+        self.assertNotEqual(config["data"]["manifest_dir"], reference["data"]["manifest_dir"])
+        config["data"].update(raw_root="raw", manifest_dir="manifests/convnext224", num_workers=0)
+        config["data"]["cache"]["root"] = "cache/224"
+        directory = build_offline_cache(config, self.root, workers=0)
+        self.assertEqual(json.loads((directory / "metadata.json").read_text())["processed"], 22)
+        for split, rows in self.records.items():
+            bound = cached_records(rows, config["data"], self.root)
+            with Image.open(bound[0]["image_path"]) as image:
+                self.assertEqual(max(image.size), 224)
+                if split != "train":
+                    self.assertEqual(image.size, (224, 224))
+            batch = next(iter(_loader(rows, config, self.root, self.device, self.runtime,
+                                      training=split == "train")))
+            self.assertEqual(tuple(batch["image"].shape[-2:]), (224, 224))
+        incompatible = copy.deepcopy(config["data"])
+        incompatible["image_size"] = 288
+        with self.assertRaisesRegex(ValueError, "incompatible"):
+            cached_records(self.records["valid"], incompatible, self.root)
+
+    def test_pw10_224_trains_reports_and_reloads_without_changing_pw5(self):
+        config = load_convnext_config(ROOT / "configs/timm_convnext_tiny_fb_in1k_224_pw10_official_single3090_cache_v1.yaml")
+        baseline = load_convnext_config(ROOT / "configs/timm_convnext_tiny_fb_in1k_224_pw5_official_single3090_cache_v1.yaml")
+        self.assertEqual(config["data"], baseline["data"])
+        self.assertEqual(config["model"], baseline["model"])
+        self.assertNotEqual(config["experiment"]["name"], baseline["experiment"]["name"])
+        self.assertEqual((baseline["training"]["pos_weight"], config["training"]["pos_weight"]), (5.0, 10.0))
+        logits, labels = torch.zeros(2, 1), torch.tensor([[0.0], [1.0]])
+        self.assertGreater(weighted_bce_loss(self.device, 10.0)(logits, labels), pw5_loss(self.device)(logits, labels))
+        config["data"].update(raw_root="raw", manifest_dir="manifests/convnext_pw10", num_workers=0)
+        config["data"]["cache"]["root"] = "cache/pw10"
+        config["training"].update(epochs=1, batch_size=2, eval_batch_size=3, accumulation_steps=2,
+            precision="fp32", amp=False, early_stopping_enabled=False, min_epochs=None, patience=None, min_delta=None)
+        build_offline_cache(config, self.root, workers=0)
+        path = self.root / "pw10.yaml"
+        write_yaml(path, config)
+        factory = lambda *a, **kw: (PixelClassifier(), self.metadata)
+        with patch("eye_qing_guang.pipelines.convnext_official.build_convnext_model", side_effect=factory), \
+             patch("eye_qing_guang.contracts.convnext_checkpoints.build_convnext_model", side_effect=factory), \
+             patch("eye_qing_guang.pipelines.convnext_official.create_source_runtime", return_value=(self.runtime, self.device)), \
+             patch("torch.cuda.synchronize"), patch("torch.cuda.empty_cache"):
+            output = run_convnext_experiment(path, self.root, skip_preflight=True)
+            manifest = json.loads((output / "run_manifest.json").read_text())
+            self.assertEqual((manifest["status"], manifest["pos_weight"]), ("completed", 10.0))
+            history = read_csv(output / "reports/history.csv")
+            self.assertIn("train_weighted_bce_pw10", history[0])
+            self.assertIn("valid_weighted_bce_pw10", history[0])
+            self.assertNotIn("train_weighted_bce_pw5", history[0])
+            metrics = json.loads((output / "reports/valid_best_metrics.json").read_text())
+            self.assertIn("weighted_bce_pw10", metrics)
+            self.assertNotIn("weighted_bce_pw5", metrics)
+            _, payload = load_convnext_checkpoint(output / "checkpoints/best.pt", self.device, self.root)
+            self.assertEqual((payload["pos_weight"], payload["config"]["training"]["pos_weight"]), (10.0, 10.0))
+            self.assertEqual(len(read_csv(output / "submission/submission.csv")), self.counts["test"])
+            payload["pos_weight"] = 5.0
+            tampered = self.root / "wrong_pw.pt"
+            torch.save(payload, tampered)
+            with self.assertRaisesRegex(ValueError, "pos_weight"):
+                load_convnext_checkpoint(tampered, self.device, self.root)
 
     def test_preflight_training_best_reload_and_submission_raw_and_cache(self):
         build_offline_cache(self.config, self.root, workers=0)

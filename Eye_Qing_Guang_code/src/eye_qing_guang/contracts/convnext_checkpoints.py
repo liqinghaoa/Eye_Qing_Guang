@@ -5,7 +5,7 @@ from pathlib import Path
 
 import torch
 
-from eye_qing_guang.contracts.convnext_config import SUPPORTED_MODEL_NAMES, validate_convnext_config
+from eye_qing_guang.contracts.convnext_config import SUPPORTED_MODEL_NAMES, SUPPORTED_POS_WEIGHTS, validate_convnext_config
 from eye_qing_guang.models.timm_convnext import build_convnext_model
 from eye_qing_guang.utils.timm_artifacts import atomic_write
 
@@ -63,7 +63,8 @@ class ConvNeXtCheckpointStore:
         source.setdefault("sha256", None)
         metadata["source"] = source
         payload = plain({"format_version": 3, "checkpoint_kind": "inference_weight", "epoch": epoch,
-                         "config": config, "age_stats": None, "pos_weight": 5.0, "model_state": dict(state),
+                         "config": config, "age_stats": None,
+                         "pos_weight": config["training"]["pos_weight"], "model_state": dict(state),
                          "metrics": metrics, "timm_version": str(metadata["timm_version"]),
                          "model_name": model_name, "num_features": 768, "model_metadata": metadata})
         destination = self.directory / name
@@ -76,10 +77,13 @@ def load_convnext_checkpoint(path, device, root):
     if (not isinstance(payload, dict) or payload.get("format_version") != 3
             or payload.get("checkpoint_kind") != "inference_weight"
             or payload.get("model_name") not in SUPPORTED_MODEL_NAMES or payload.get("num_features") != 768
-            or payload.get("pos_weight") != 5.0 or payload.get("age_stats") is not None
+            or type(payload.get("pos_weight")) not in (int, float)
+            or payload["pos_weight"] not in SUPPORTED_POS_WEIGHTS or payload.get("age_stats") is not None
             or any(k in payload for k in ("optimizer_state", "scheduler", "scaler", "rng", "training_state"))):
         raise ValueError("Invalid format-3 timm inference checkpoint; resume is unsupported.")
     validate_convnext_config(payload["config"])
+    if payload["pos_weight"] != payload["config"]["training"]["pos_weight"]:
+        raise ValueError("Checkpoint pos_weight does not match its frozen configuration.")
     if payload["config"]["model"]["name"] != payload["model_name"]:
         raise ValueError("Checkpoint model identity does not match its frozen configuration.")
     metadata = payload.get("model_metadata")

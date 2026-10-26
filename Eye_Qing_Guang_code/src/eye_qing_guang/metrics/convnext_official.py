@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 
 from eye_qing_guang.metrics.binary_classification import compute_binary_metrics
+from eye_qing_guang.contracts.convnext_config import weighted_bce_key
 
 
 def recall_at_specificity(labels, probabilities, minimum):
@@ -32,7 +33,7 @@ def recall_at_specificity(labels, probabilities, minimum):
     return best
 
 
-def compute_official_metrics(predictions, weighted_bce):
+def compute_official_metrics(predictions, weighted_bce, pos_weight=5.0):
     labels = [r["label"] for r in predictions]
     scores = [r["probability"] for r in predictions]
     metrics = compute_binary_metrics(labels, scores, threshold=0.5)
@@ -41,8 +42,9 @@ def compute_official_metrics(predictions, weighted_bce):
     if not math.isfinite(weighted_bce) or weighted_bce < 0:
         raise ValueError("Invalid validation weighted BCE.")
     precision, recall, _ = precision_recall_curve(labels, scores)
-    metrics.update(weighted_bce_pw5=float(weighted_bce), pr_auc_trapezoid=float(auc(recall, precision)),
-                   hard_label_roc_auc=float(roc_auc_score(labels, np.asarray(scores) >= 0.5)),
-                   recall_at_specificity_90=recall_at_specificity(labels, scores, 0.90),
-                   recall_at_specificity_95=recall_at_specificity(labels, scores, 0.95))
+    metrics.update({weighted_bce_key(pos_weight): float(weighted_bce),
+                   "pr_auc_trapezoid": float(auc(recall, precision)),
+                   "hard_label_roc_auc": float(roc_auc_score(labels, np.asarray(scores) >= 0.5)),
+                   "recall_at_specificity_90": recall_at_specificity(labels, scores, 0.90),
+                   "recall_at_specificity_95": recall_at_specificity(labels, scores, 0.95)})
     return metrics
