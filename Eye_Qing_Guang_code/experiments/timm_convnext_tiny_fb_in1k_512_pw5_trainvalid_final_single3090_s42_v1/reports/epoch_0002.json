@@ -1,0 +1,8 @@
+{
+  "epoch": 2,
+  "train_weighted_bce_pw5": 0.15474118961244027,
+  "lr": 0.00017967914438502675,
+  "successful_updates": 150,
+  "consumed_samples": 57245,
+  "seconds": 360.375
+}

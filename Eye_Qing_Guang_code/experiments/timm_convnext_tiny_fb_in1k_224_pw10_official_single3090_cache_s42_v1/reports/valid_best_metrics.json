@@ -1,0 +1,46 @@
+{
+  "n_samples": 5849,
+  "threshold": 0.5,
+  "positives": 191,
+  "positive_rate": 0.03265515472730381,
+  "brier": 0.03443642938920139,
+  "roc_auc": 0.9832373750552893,
+  "average_precision": 0.768009148450525,
+  "accuracy": 0.9517866301931954,
+  "balanced_accuracy": 0.9219614908418604,
+  "f1": 0.5466237942122186,
+  "precision": 0.39443155452436196,
+  "sensitivity": 0.8900523560209425,
+  "specificity": 0.9538706256627784,
+  "tn": 5397,
+  "fp": 261,
+  "fn": 21,
+  "tp": 170,
+  "weighted_bce_pw10": 0.1883458213623187,
+  "pr_auc_trapezoid": 0.767465920184679,
+  "hard_label_roc_auc": 0.9219614908418603,
+  "recall_at_specificity_90": {
+    "threshold": 0.17294526100158691,
+    "endpoint": null,
+    "sensitivity": 0.9738219895287958,
+    "specificity": 0.9015553199010251,
+    "tp": 186,
+    "fp": 557,
+    "tn": 5101,
+    "fn": 5
+  },
+  "recall_at_specificity_95": {
+    "threshold": 0.47409787774086,
+    "endpoint": null,
+    "sensitivity": 0.900523560209424,
+    "specificity": 0.951926475786497,
+    "tp": 172,
+    "fp": 272,
+    "tn": 5386,
+    "fn": 19
+  },
+  "reload_max_abs": {
+    "logit": 0.0,
+    "probability": 0.0
+  }
+}

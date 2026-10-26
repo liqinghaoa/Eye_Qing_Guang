@@ -1,0 +1,46 @@
+{
+  "n_samples": 5849,
+  "threshold": 0.5,
+  "positives": 191,
+  "positive_rate": 0.03265515472730381,
+  "brier": 0.012807576964624378,
+  "roc_auc": 0.9865797212490677,
+  "average_precision": 0.8306922973797659,
+  "accuracy": 0.982903060352197,
+  "balanced_accuracy": 0.864691425197885,
+  "f1": 0.7382198952879581,
+  "precision": 0.7382198952879581,
+  "sensitivity": 0.7382198952879581,
+  "specificity": 0.9911629551078119,
+  "tn": 5608,
+  "fp": 50,
+  "fn": 50,
+  "tp": 141,
+  "weighted_bce_pw5": 0.14209369092253774,
+  "pr_auc_trapezoid": 0.8303612703251874,
+  "hard_label_roc_auc": 0.864691425197885,
+  "recall_at_specificity_90": {
+    "threshold": 0.005957077722996473,
+    "endpoint": null,
+    "sensitivity": 0.9685863874345549,
+    "specificity": 0.9068575468363379,
+    "tp": 185,
+    "fp": 527,
+    "tn": 5131,
+    "fn": 6
+  },
+  "recall_at_specificity_95": {
+    "threshold": 0.03832593560218811,
+    "endpoint": null,
+    "sensitivity": 0.9476439790575916,
+    "specificity": 0.9515729939908095,
+    "tp": 181,
+    "fp": 274,
+    "tn": 5384,
+    "fn": 10
+  },
+  "reload_max_abs": {
+    "logit": 0.0,
+    "probability": 0.0
+  }
+}

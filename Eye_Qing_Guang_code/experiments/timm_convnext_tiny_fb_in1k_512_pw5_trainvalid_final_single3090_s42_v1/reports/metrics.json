@@ -1,0 +1,17 @@
+{
+  "train_samples": 57245,
+  "official_valid_merged": true,
+  "validation_used_after_merge": false,
+  "checkpoint_selection": "fixed_epoch",
+  "final_epoch": 7,
+  "test_samples": 5855,
+  "validation_metrics": "not_used",
+  "history_final": {
+    "epoch": 7,
+    "train_weighted_bce_pw5": 0.06395823668329965,
+    "lr": 0.00029967313726920677,
+    "successful_updates": 525,
+    "consumed_samples": 57245,
+    "seconds": 361.81200000003446
+  }
+}

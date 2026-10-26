@@ -1,0 +1,129 @@
+experiment:
+  name: timm_convnext_tiny_fb_in1k_224_pw5_official_single3090_cache_s42_v1
+  protocol: timm_convnext_official_trainvalid_v1
+  seed: 42
+  output_root: experiments
+recipe:
+  implementation: timm_single_device_v1
+  implementation_path: src/eye_qing_guang/utils/timm_source.py
+  parameter_notes: ConvNeXt-Tiny ImageNet-1K full fine-tuning with AdamW/all_trainable,
+    successful-update warmup/cosine, clipping and early stopping; input 224x224; microbatch
+    48 x accumulation 16 = effective batch 768; no process group.
+data:
+  raw_root: data/raw/glaucoma_first
+  manifest_dir: data/manifests/glaucoma_first_convnext_in1k_official_single3090_224_cache_v1
+  image_column: Image_name
+  label_column: True_Label
+  age_column: Age
+  splits:
+    train:
+      csv: train.csv
+      images: train
+      labeled: true
+    valid:
+      csv: valid.csv
+      images: valid
+      labeled: true
+    test:
+      csv: test.csv
+      images: test
+      labeled: false
+  image_size: 224
+  num_workers: 6
+  cache:
+    enabled: true
+    root: data/processed/glaucoma_first_fov224_cache_v1
+    version: fov_presized_letterbox_v2
+  mean:
+  - 0.485
+  - 0.456
+  - 0.406
+  std:
+  - 0.229
+  - 0.224
+  - 0.225
+  preprocessing:
+    version: fov_presized_letterbox_v2
+    preview_size: 512
+    threshold: 8
+    min_line_fraction: 0.01
+    margin: 0.02
+    min_area: 0.5
+    min_coverage: 0.995
+  augmentation:
+    horizontal_flip: 0.5
+    rotation_degrees: 10
+    brightness:
+    - 0.9
+    - 1.1
+    contrast:
+    - 0.9
+    - 1.1
+model:
+  library: timm
+  name: convnext_tiny.fb_in1k
+  pretrained: true
+  timm_version: 1.0.22
+  pretrained_file: weights/convnext_tiny.fb_in1k.safetensors
+  pretrained_revision: main
+  dropout: 0.0
+  drop_path_rate: 0.0
+  batchnorm: not_applicable
+  use_age: false
+training:
+  optimizer: adamw
+  optimizer_parameter_groups: all_trainable
+  epochs: 100
+  batch_size: 48
+  eval_batch_size: 16
+  accumulation_steps: 16
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  betas:
+  - 0.9
+  - 0.999
+  eps: 1.0e-08
+  loss: bce
+  pos_weight: 5.0
+  auto_pos_weight: false
+  device: cuda:0
+  precision: bf16
+  amp: true
+  grad_clip: 5.0
+  max_consecutive_skips: null
+  scheduler: warmup_cosine_success_v1
+  schedule_total_epochs: 100
+  warmup_epochs: 5
+  warmup_start_lr: 0.0001
+  min_lr: 1.0e-06
+  monitor: roc_auc
+  early_stopping_enabled: true
+  min_epochs: 30
+  min_delta: 0.0001
+  patience: 15
+distributed:
+  enabled: false
+  world_size: 1
+  gradient_transport: none
+  cpus_per_rank: 6
+  backend: none
+  timeout_seconds: 900
+  multiprocessing_context: spawn
+  log_every_n_groups: 10
+evaluation:
+  threshold: 0.5
+  precision: fp32
+  expected_valid_count: 5849
+  duplicate_logit_atol: 1.0e-06
+preflight:
+  max_sample_instances: 64
+  validation_samples: 8
+  gradient_relative_l2_max: 0.1
+  gradient_max_abs: 0.1
+  reload_atol: 1.0e-06
+  reload_rtol: 1.0e-05
+submission:
+  mode: competition
+  id_column: Image_name
+  value_column: Probability
+  label_column: Pred_Label

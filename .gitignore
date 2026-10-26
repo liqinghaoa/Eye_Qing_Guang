@@ -29,8 +29,7 @@ Thumbs.db
 
 
 # Each experiment is independent; weights and generated artifacts stay local.
-/Eye_Qing_Guang_code/experiments/*
-!/Eye_Qing_Guang_code/experiments/.gitkeep
+/Eye_Qing_Guang_code/experiments/**/checkpoints/
 /Eye_Qing_Guang_code/outputs/
 *.pt
 *.pth

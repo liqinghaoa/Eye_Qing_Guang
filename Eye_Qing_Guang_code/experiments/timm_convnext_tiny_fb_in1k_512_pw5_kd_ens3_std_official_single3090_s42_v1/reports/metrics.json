@@ -1,0 +1,7 @@
+{
+  "best_epoch": 28,
+  "best_valid_auroc": 0.9896416879033347,
+  "completed_epochs": 43,
+  "last_epoch": 43,
+  "stop_reason": "early_stopping"
+}

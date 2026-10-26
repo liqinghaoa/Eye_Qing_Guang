@@ -1,0 +1,333 @@
+{
+  "status": "completed",
+  "recorded_at_utc": "2026-10-25T05:14:44.950501+00:00",
+  "python": "3.11.17 | packaged by Anaconda, Inc. | (main, Oct  1 2026, 20:16:54) [MSC v.1942 64 bit (AMD64)]",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "protocol": "timm_convnext_official_trainvalid_v1",
+  "stages": {
+    "training": {
+      "status": "completed",
+      "completed_epochs": 30,
+      "samples": 1541880,
+      "best_epoch": 12,
+      "best_valid_auroc": 0.98493723384764,
+      "last_epoch": 30,
+      "stop_reason": "early_stopping"
+    },
+    "best_validation": {
+      "status": "completed",
+      "epoch": 12,
+      "samples": 5849
+    },
+    "test_inference": {
+      "status": "completed",
+      "epoch": 12,
+      "samples": 5855
+    },
+    "submission": {
+      "status": "completed",
+      "samples": 5855,
+      "path": "E:\\projects\\Eye_Qing_Guang\\experiments\\timm_convnext_tiny_fb_in1k_224_pw5_official_single3090_cache_s42_v1\\submission\\submission.csv"
+    }
+  },
+  "sources": {
+    "protocol": "timm_convnext_official_trainvalid_v1",
+    "raw_root": "E:\\projects\\Eye_Qing_Guang\\data\\raw\\glaucoma_first",
+    "splits": {
+      "train": {
+        "samples": 51396,
+        "labels": {
+          "0": 49739,
+          "1": 1657
+        },
+        "missing_age": 10,
+        "filename_case_resolved": 51396,
+        "decoded": false,
+        "source": "official_train",
+        "source_csv": "E:\\projects\\Eye_Qing_Guang\\data\\raw\\glaucoma_first\\train.csv"
+      },
+      "valid": {
+        "samples": 5849,
+        "labels": {
+          "0": 5658,
+          "1": 191
+        },
+        "missing_age": 0,
+        "filename_case_resolved": 5849,
+        "decoded": false,
+        "source": "official_valid",
+        "source_csv": "E:\\projects\\Eye_Qing_Guang\\data\\raw\\glaucoma_first\\valid.csv"
+      },
+      "test": {
+        "samples": 5855,
+        "labels": {},
+        "missing_age": 0,
+        "filename_case_resolved": 5855,
+        "decoded": false,
+        "source": "official_test",
+        "source_csv": "E:\\projects\\Eye_Qing_Guang\\data\\raw\\glaucoma_first\\test.csv"
+      }
+    },
+    "offline_cache": {
+      "root": "data/processed/glaucoma_first_fov224_cache_v1",
+      "signature": {
+        "version": "fov_presized_letterbox_v2",
+        "raw_root": "E:\\projects\\Eye_Qing_Guang\\data\\raw\\glaucoma_first",
+        "preprocessing": {
+          "version": "fov_presized_letterbox_v2",
+          "preview_size": 512,
+          "threshold": 8,
+          "min_line_fraction": 0.01,
+          "margin": 0.02,
+          "min_area": 0.5,
+          "min_coverage": 0.995
+        },
+        "image_size": 224,
+        "format": "PNG_RGB_uint8",
+        "train_stage": "fov_resize_longest_edge_no_padding",
+        "evaluation_stage": "fov_letterbox"
+      }
+    }
+  },
+  "config": {
+    "experiment": {
+      "name": "timm_convnext_tiny_fb_in1k_224_pw5_official_single3090_cache_s42_v1",
+      "protocol": "timm_convnext_official_trainvalid_v1",
+      "seed": 42,
+      "output_root": "experiments"
+    },
+    "recipe": {
+      "implementation": "timm_single_device_v1",
+      "implementation_path": "src/eye_qing_guang/utils/timm_source.py",
+      "parameter_notes": "ConvNeXt-Tiny ImageNet-1K full fine-tuning with AdamW/all_trainable, successful-update warmup/cosine, clipping and early stopping; input 224x224; microbatch 48 x accumulation 16 = effective batch 768; no process group."
+    },
+    "data": {
+      "raw_root": "data/raw/glaucoma_first",
+      "manifest_dir": "data/manifests/glaucoma_first_convnext_in1k_official_single3090_224_cache_v1",
+      "image_column": "Image_name",
+      "label_column": "True_Label",
+      "age_column": "Age",
+      "splits": {
+        "train": {
+          "csv": "train.csv",
+          "images": "train",
+          "labeled": true
+        },
+        "valid": {
+          "csv": "valid.csv",
+          "images": "valid",
+          "labeled": true
+        },
+        "test": {
+          "csv": "test.csv",
+          "images": "test",
+          "labeled": false
+        }
+      },
+      "image_size": 224,
+      "num_workers": 6,
+      "cache": {
+        "enabled": true,
+        "root": "data/processed/glaucoma_first_fov224_cache_v1",
+        "version": "fov_presized_letterbox_v2"
+      },
+      "mean": [
+        0.485,
+        0.456,
+        0.406
+      ],
+      "std": [
+        0.229,
+        0.224,
+        0.225
+      ],
+      "preprocessing": {
+        "version": "fov_presized_letterbox_v2",
+        "preview_size": 512,
+        "threshold": 8,
+        "min_line_fraction": 0.01,
+        "margin": 0.02,
+        "min_area": 0.5,
+        "min_coverage": 0.995
+      },
+      "augmentation": {
+        "horizontal_flip": 0.5,
+        "rotation_degrees": 10,
+        "brightness": [
+          0.9,
+          1.1
+        ],
+        "contrast": [
+          0.9,
+          1.1
+        ]
+      }
+    },
+    "model": {
+      "library": "timm",
+      "name": "convnext_tiny.fb_in1k",
+      "pretrained": true,
+      "timm_version": "1.0.22",
+      "pretrained_file": "weights/convnext_tiny.fb_in1k.safetensors",
+      "pretrained_revision": "main",
+      "dropout": 0.0,
+      "drop_path_rate": 0.0,
+      "batchnorm": "not_applicable",
+      "use_age": false
+    },
+    "training": {
+      "optimizer": "adamw",
+      "optimizer_parameter_groups": "all_trainable",
+      "epochs": 100,
+      "batch_size": 48,
+      "eval_batch_size": 16,
+      "accumulation_steps": 16,
+      "learning_rate": 0.0003,
+      "weight_decay": 0.01,
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "loss": "bce",
+      "pos_weight": 5.0,
+      "auto_pos_weight": false,
+      "device": "cuda:0",
+      "precision": "bf16",
+      "amp": true,
+      "grad_clip": 5.0,
+      "max_consecutive_skips": null,
+      "scheduler": "warmup_cosine_success_v1",
+      "schedule_total_epochs": 100,
+      "warmup_epochs": 5,
+      "warmup_start_lr": 0.0001,
+      "min_lr": 1e-06,
+      "monitor": "roc_auc",
+      "early_stopping_enabled": true,
+      "min_epochs": 30,
+      "min_delta": 0.0001,
+      "patience": 15
+    },
+    "distributed": {
+      "enabled": false,
+      "world_size": 1,
+      "gradient_transport": "none",
+      "cpus_per_rank": 6,
+      "backend": "none",
+      "timeout_seconds": 900,
+      "multiprocessing_context": "spawn",
+      "log_every_n_groups": 10
+    },
+    "evaluation": {
+      "threshold": 0.5,
+      "precision": "fp32",
+      "expected_valid_count": 5849,
+      "duplicate_logit_atol": 1e-06
+    },
+    "preflight": {
+      "max_sample_instances": 64,
+      "validation_samples": 8,
+      "gradient_relative_l2_max": 0.1,
+      "gradient_max_abs": 0.1,
+      "reload_atol": 1e-06,
+      "reload_rtol": 1e-05
+    },
+    "submission": {
+      "mode": "competition",
+      "id_column": "Image_name",
+      "value_column": "Probability",
+      "label_column": "Pred_Label"
+    }
+  },
+  "preflight": "skipped_by_cli",
+  "loss": "bce",
+  "pos_weight": 5.0,
+  "auto_pos_weight": false,
+  "focal_gamma": "unused_for_this_run",
+  "effective_batch": 768,
+  "precision": "bf16",
+  "scaler_enabled": false,
+  "gradient_transport": "none",
+  "training_engine": {
+    "implementation": "timm_single_device_v1",
+    "implementation_path": "src/eye_qing_guang/utils/timm_source.py",
+    "parameter_notes": "ConvNeXt-Tiny ImageNet-1K full fine-tuning with AdamW/all_trainable, successful-update warmup/cosine, clipping and early stopping; input 224x224; microbatch 48 x accumulation 16 = effective batch 768; no process group."
+  },
+  "device": "cuda:0",
+  "cuda_visible_devices": null,
+  "micro_batch": 48,
+  "accumulation_steps": 16,
+  "torch_version": "2.5.1+cu121",
+  "world_size": 1,
+  "t4_latency_status": "not_measured",
+  "model_metadata": {
+    "timm_version": "1.0.22",
+    "model_name": "convnext_tiny.fb_in1k",
+    "num_features": 768,
+    "num_classes": 0,
+    "global_pool": "avg",
+    "initialization": "pretrained",
+    "source": {
+      "repo_id": "timm/convnext_tiny.fb_in1k",
+      "requested_revision": "main",
+      "hf_hub_id": "timm/convnext_tiny.fb_in1k",
+      "url": "https://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth",
+      "pretrained_cfg": {
+        "url": "https://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth",
+        "hf_hub_id": "timm/convnext_tiny.fb_in1k",
+        "architecture": "convnext_tiny",
+        "tag": "fb_in1k",
+        "custom_load": false,
+        "input_size": [
+          3,
+          224,
+          224
+        ],
+        "test_input_size": [
+          3,
+          288,
+          288
+        ],
+        "fixed_input_size": false,
+        "interpolation": "bicubic",
+        "crop_pct": 0.875,
+        "test_crop_pct": 1.0,
+        "crop_mode": "center",
+        "mean": [
+          0.485,
+          0.456,
+          0.406
+        ],
+        "std": [
+          0.229,
+          0.224,
+          0.225
+        ],
+        "num_classes": 1000,
+        "pool_size": [
+          7,
+          7
+        ],
+        "first_conv": "stem.0",
+        "classifier": "head.fc",
+        "license": "apache-2.0"
+      },
+      "local_file": "E:\\projects\\Eye_Qing_Guang\\weights\\convnext_tiny.fb_in1k.safetensors",
+      "local_bytes": 114374272,
+      "sha256": "08b9dc9c3a3a29421de7996761e176501896d1ae7fc3085cf56a643772329276",
+      "cache_revision": null
+    },
+    "normalization": "layernorm",
+    "preprocessing_difference": "224 RGB/FOV/BILINEAR/letterbox; no timm center crop"
+  },
+  "deployment": {
+    "inference_model": "checkpoints/best.pt",
+    "uncompressed_bytes": 111346630,
+    "MB": 111.34663,
+    "MiB": 106.18842124938965,
+    "size_limit_bytes": 500000000,
+    "model_size_status": "passed",
+    "t4_latency_status": "not_measured"
+  },
+  "total_seconds": 2608.546999999904
+}
