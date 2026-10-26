@@ -10,6 +10,8 @@ __pycache__/
 .coverage
 htmlcov/
 
+node_modules/
+
 # Local environments / IDE / credentials
 .venv/
 venv/
